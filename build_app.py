@@ -8,7 +8,7 @@ def run_pyinstaller_build():
     """
     
     # --- Configuration ---
-    APP_NAME = "DeskMix"
+    APP_NAME = "DeskMixer"
     ICON_PATH = "icons/logo.png"
     MAIN_SCRIPT = "main.py"
     
