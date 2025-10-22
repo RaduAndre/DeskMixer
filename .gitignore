@@ -1,0 +1,54 @@
+----------------------------------------------------------------------
+
+1. IDE and Virtual Environment
+
+----------------------------------------------------------------------
+
+IDE-specific directories (IntelliJ/PyCharm/WebStorm, etc.)
+
+.idea/
+
+Virtual Environments
+
+.venv/
+env/
+venv/
+Venv/
+
+----------------------------------------------------------------------
+
+2. Python Cache and Build Artifacts
+
+----------------------------------------------------------------------
+
+Python bytecode/cache directories
+
+audio/pycache/
+serial_comm/pycache/
+ui/pycache/
+utils/pycache/
+*.pyc
+
+PyInstaller/spec files (used for creating executables)
+
+DesjMix.spec
+build/
+dist/config/
+dist/error.log
+
+----------------------------------------------------------------------
+
+3. Local Configuration and Logs (Secret/Ephemeral Data)
+
+----------------------------------------------------------------------
+
+Log files
+
+error.log
+config/error.log
+
+Local configuration files that should not be shared or tracked
+
+(especially if they contain secrets or local paths)
+
+config/config.json
