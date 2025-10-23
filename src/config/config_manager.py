@@ -188,7 +188,7 @@ class ConfigManager:
             self.config[key] = new_value
             self.has_changes = True
 
-    def get_start_in_tray(self, default=True):
+    def get_start_in_tray(self, default=False):
         """Get the value for the start_in_tray config key."""
         return self.config.get('start_in_tray', default)
 

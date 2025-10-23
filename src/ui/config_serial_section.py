@@ -22,7 +22,7 @@ class ConfigSerialSection:
         self.baud_var = tk.StringVar(value="9600")
         
         # Settings variables
-        self.start_in_tray = tk.BooleanVar(value=self.config_manager.get_start_in_tray(default=True))
+        self.start_in_tray = tk.BooleanVar(value=self.config_manager.get_start_in_tray(default=False))
         self.start_on_windows_start = tk.BooleanVar(value=check_startup_status())
         
         self.serial_status_label = None

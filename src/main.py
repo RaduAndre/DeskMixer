@@ -99,7 +99,7 @@ def run_app():
         start_hidden = ui_app.config_tab.serial_section.start_in_tray.get()
     else:
         # Fallback to config manager if serial_section not available yet
-        start_hidden = ui_app.config_manager.get_start_in_tray(default=True)
+        start_hidden = ui_app.config_manager.get_start_in_tray(default=False)
     
     if not start_hidden:
         # User wants the window visible on startup
