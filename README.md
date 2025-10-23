@@ -80,6 +80,7 @@ A physical volume mixer with programmable buttons for Windows, inspired by [Deej
 
 In the **Volume** tab:
 - Assign each slider to control specific applications or system audio
+- You can assign multiple applications to the same slider
 - Adjust volumes in real-time
 - Changes are saved automatically
 
