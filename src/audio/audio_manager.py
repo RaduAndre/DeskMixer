@@ -1,4 +1,6 @@
 from utils.error_handler import log_error
+import threading
+import time
 
 # Try importing heavy audio libs; allow app to run without them (degraded mode).
 AUDIO_AVAILABLE = True
@@ -25,8 +27,14 @@ class AudioManager:
         self.system_sounds_session = None
         self.last_focused_app = None  # Track last focused app for debugging
 
+        # Device monitoring
+        self.current_device_id = None
+        self.device_monitor_thread = None
+        self.monitor_running = False
+
         if AUDIO_AVAILABLE:
             self._initialize()
+            self._start_device_monitor()
         else:
             # In degraded mode, keep attributes present but avoid calling heavy initialization.
             log_error(Exception("Audio libs missing"), "AudioManager initialized in degraded mode")
@@ -38,6 +46,12 @@ class AudioManager:
             devices = AudioUtilities.GetSpeakers()
             interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
             self.master_volume = cast(interface, POINTER(IAudioEndpointVolume))
+
+            # Store current device ID for change detection
+            try:
+                self.current_device_id = devices.GetId()
+            except:
+                self.current_device_id = None
 
             # Microphone
             try:
@@ -51,6 +65,88 @@ class AudioManager:
         except Exception as e:
             log_error(e, "Failed to initialize audio devices")
             raise
+
+    def _start_device_monitor(self):
+        """Start background thread to monitor for device changes"""
+        if not AUDIO_AVAILABLE:
+            return
+
+        self.monitor_running = True
+        self.device_monitor_thread = threading.Thread(target=self._monitor_device_changes, daemon=True)
+        self.device_monitor_thread.start()
+
+    def _monitor_device_changes(self):
+        """Background thread that checks for audio device changes"""
+        while self.monitor_running:
+            try:
+                time.sleep(1.0)  # Check every second
+
+                # Get current default device
+                devices = AudioUtilities.GetSpeakers()
+                new_device_id = devices.GetId()
+
+                # If device changed, refresh everything
+                if self.current_device_id and new_device_id != self.current_device_id:
+                    print(
+                        f"Audio device changed! Refreshing... (Old: {self.current_device_id[:20]}..., New: {new_device_id[:20]}...)")
+                    self.current_device_id = new_device_id
+
+                    # Give Windows a moment to fully switch
+                    time.sleep(0.5)
+
+                    # Refresh all audio interfaces
+                    self.refresh_audio_devices()
+
+            except Exception as e:
+                # Don't spam errors, just log once
+                if not hasattr(self, '_monitor_error_logged'):
+                    log_error(e, "Error in device monitor thread")
+                    self._monitor_error_logged = True
+                time.sleep(5.0)  # Wait longer on error
+
+    def refresh_audio_devices(self):
+        """Refresh audio devices when output changes (e.g., USB to Speaker)"""
+        try:
+            if not AUDIO_AVAILABLE:
+                return False
+
+            print("Refreshing audio devices...")
+
+            # Re-initialize master volume with new device
+            devices = AudioUtilities.GetSpeakers()
+            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+            self.master_volume = cast(interface, POINTER(IAudioEndpointVolume))
+
+            # Update device ID
+            try:
+                self.current_device_id = devices.GetId()
+            except:
+                pass
+
+            # Re-initialize microphone
+            try:
+                mic_devices = AudioUtilities.GetMicrophone()
+                mic_interface = mic_devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                self.mic_volume = cast(mic_interface, POINTER(IAudioEndpointVolume))
+            except Exception as e:
+                log_error(e, "Microphone not available during refresh")
+                self.mic_volume = None
+
+            # Clear old sessions - CRITICAL: Old sessions point to old device!
+            self.app_sessions.clear()
+
+            # Refresh all audio sessions with NEW device
+            self.get_all_audio_apps()
+
+            # Refresh system sounds session
+            self._refresh_system_sounds_session()
+
+            print("Audio devices refreshed successfully!")
+            return True
+
+        except Exception as e:
+            log_error(e, "Error refreshing audio devices")
+            return False
 
     def _refresh_system_sounds_session(self):
         """Refresh and find the system sounds audio session"""
@@ -100,6 +196,9 @@ class AudioManager:
                         success_count += 1
                     except Exception as e:
                         log_error(e, f"Error setting volume for one instance of {app_name}")
+                        # Session might be stale, trigger refresh
+                        if "invalid" in str(e).lower() or "access" in str(e).lower():
+                            self.get_all_audio_apps()
                         continue
 
                 return success_count > 0
@@ -120,7 +219,16 @@ class AudioManager:
 
                 # Get mute state from first instance
                 if len(sessions) > 0:
-                    current_mute = sessions[0].GetMute()
+                    try:
+                        current_mute = sessions[0].GetMute()
+                    except:
+                        # Session might be stale, refresh
+                        self.get_all_audio_apps()
+                        if app_name not in self.app_sessions or len(self.app_sessions[app_name]) == 0:
+                            return False
+                        sessions = self.app_sessions[app_name]
+                        current_mute = sessions[0].GetMute()
+
                     new_mute = not current_mute
 
                     # Apply to all instances
@@ -430,6 +538,11 @@ class AudioManager:
     def cleanup(self):
         """Cleanup audio resources"""
         try:
+            # Stop device monitor
+            self.monitor_running = False
+            if self.device_monitor_thread:
+                self.device_monitor_thread.join(timeout=2.0)
+
             self.app_sessions.clear()
             self.system_sounds_session = None
         except Exception as e:
@@ -572,6 +685,13 @@ class AudioManager:
             return self.master_volume.GetMasterVolumeLevelScalar()
         except Exception as e:
             log_error(e, "Error getting master volume")
+            # Device might have changed, try refresh
+            self.refresh_audio_devices()
+            try:
+                if self.master_volume:
+                    return self.master_volume.GetMasterVolumeLevelScalar()
+            except:
+                pass
             return 0.5
 
     def set_master_volume(self, level, mode='normal'):
@@ -583,6 +703,14 @@ class AudioManager:
             self.master_volume.SetMasterVolumeLevelScalar(adjusted_level, None)
         except Exception as e:
             log_error(e, "Error setting master volume")
+            # Device might have changed, refresh and retry
+            self.refresh_audio_devices()
+            try:
+                if self.master_volume:
+                    adjusted_level = self._apply_volume_curve(level, mode)
+                    self.master_volume.SetMasterVolumeLevelScalar(adjusted_level, None)
+            except:
+                pass
 
     def has_microphone(self):
         """Check if microphone is available"""
