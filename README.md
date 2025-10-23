@@ -37,7 +37,7 @@ A physical volume mixer with programmable buttons for Windows, inspired by [Deej
 
 #### Option 1: Pre-built Executable (Windows)
 1. Releases will be uploaded on the [Releases](../../releases) page
-2. For now you can build the code or download and run `DeskMixer.exe` from the `/src/dist/` folder
+2. For now you can build the code or download and run `DeskMixer.exe` from the `/dist/` folder
 
 #### Option 2: Run from Source
 1. Clone the repository:
@@ -80,6 +80,7 @@ A physical volume mixer with programmable buttons for Windows, inspired by [Deej
 
 In the **Volume** tab:
 - Assign each slider to control specific applications or system audio
+- You can assign multiple applications to the same slider
 - Adjust volumes in real-time
 - Changes are saved automatically
 

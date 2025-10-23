@@ -137,20 +137,20 @@ class ConfigBindingsSection:
             add_btn.pack(side="left", padx=5)
 
             # Refresh apps button
-            refresh_apps_btn = tk.Button(
-                btn_inner,
-                text="🔄 Refresh Apps",
-                command=self._refresh_all_app_lists,
-                bg="#404040",
-                fg="white",
-                font=("Arial", 9, "bold"),
-                relief="flat",
-                padx=10,
-                pady=5,
-                cursor="hand2"
-            )
-            refresh_apps_btn.pack(side="left", padx=5)
-            
+            #    refresh_apps_btn = tk.Button(
+            #   btn_inner,
+            #   text="🔄 Refresh Apps",
+            #   command=self._refresh_all_app_lists,
+            #   bg="#404040",
+            #   fg="white",
+            #   font=("Arial", 9, "bold"),
+            #   relief="flat",
+            #   padx=10,
+            #   pady=5,
+            #   cursor="hand2"
+            #)
+            #refresh_apps_btn.pack(side="left", padx=5)
+
             self.frame = bindings_frame
 
         except Exception as e:
@@ -340,14 +340,14 @@ class ConfigBindingsSection:
         """Add a single target selector with + and - buttons"""
         try:
             targets_frame = row_frame.targets_frame
-            
+
             # Create container for this selector
             selector_frame = tk.Frame(targets_frame, bg="#353535")
             selector_frame.pack(fill="x", pady=2)
-            
+
             # Get available targets
             targets = self.helpers.get_available_targets()
-            
+
             # Combobox (editable to allow custom app names)
             combo = ttk.Combobox(
                 selector_frame,
@@ -356,7 +356,7 @@ class ConfigBindingsSection:
                 font=("Arial", 9)
             )
             combo.pack(side="left", padx=2)
-            
+
             # Set current value
             display_name = self.helpers.get_display_name(selected_app)
             if display_name and display_name not in targets:
@@ -366,15 +366,46 @@ class ConfigBindingsSection:
                     if target.startswith("─"):
                         separator_idx = idx
                         break
-                
+
                 if separator_idx > 0:
                     targets.insert(separator_idx + 1, display_name)
                 else:
                     targets.append(display_name)
                 combo['values'] = targets
-            
+
             combo.set(display_name if display_name else "❌ None")
-            
+
+            # Auto-refresh function when dropdown is opened
+            def on_dropdown_open(event):
+                """Refresh the app list when dropdown is clicked"""
+                try:
+                    current_value = combo.get()
+                    updated_targets = self.helpers.get_available_targets()
+
+                    # Add current value to targets if not present
+                    if current_value and current_value not in updated_targets:
+                        # Find separator
+                        separator_idx = -1
+                        for idx, target in enumerate(updated_targets):
+                            if target.startswith("─"):
+                                separator_idx = idx
+                                break
+
+                        if separator_idx > 0:
+                            updated_targets.insert(separator_idx + 1, current_value)
+                        else:
+                            updated_targets.append(current_value)
+
+                    combo['values'] = updated_targets
+                    # Keep the current selection
+                    combo.set(current_value)
+                except Exception as e:
+                    log_error(e, "Error refreshing dropdown")
+
+            # Bind the dropdown open event
+            combo.bind('<Button-1>', on_dropdown_open)
+            combo.bind('<Down>', on_dropdown_open)  # Also refresh on keyboard navigation
+
             # Plus button to add another selector
             plus_btn = tk.Button(
                 selector_frame,
@@ -389,7 +420,7 @@ class ConfigBindingsSection:
                 cursor="hand2"
             )
             plus_btn.pack(side="left", padx=2)
-            
+
             # Minus button to remove this selector
             minus_btn = tk.Button(
                 selector_frame,
@@ -404,7 +435,7 @@ class ConfigBindingsSection:
                 cursor="hand2"
             )
             minus_btn.pack(side="left", padx=2)
-            
+
             # Store reference
             selector_data = {
                 'frame': selector_frame,
@@ -413,27 +444,27 @@ class ConfigBindingsSection:
                 'minus_btn': minus_btn
             }
             row_frame.target_selectors.append(selector_data)
-            
+
             # Update minus button visibility
             self._update_minus_button_visibility(row_frame)
-            
+
             # Bind events for auto-save
-            combo.bind('<<ComboboxSelected>>', 
-                      lambda e: self._auto_save_binding(row_frame))
-            combo.bind('<FocusOut>', 
-                      lambda e: self._auto_save_binding(row_frame))
+            combo.bind('<<ComboboxSelected>>',
+                       lambda e: self._auto_save_binding(row_frame))
+            combo.bind('<FocusOut>',
+                       lambda e: self._auto_save_binding(row_frame))
             combo.bind('<Return>',
-                      lambda e: self._auto_save_binding(row_frame))
-            
-            row_frame.var_entry.bind('<FocusOut>', 
-                                    lambda e: self._auto_save_binding(row_frame))
-            
+                       lambda e: self._auto_save_binding(row_frame))
+
+            row_frame.var_entry.bind('<FocusOut>',
+                                     lambda e: self._auto_save_binding(row_frame))
+
             # Hover effects
             plus_btn.bind('<Enter>', lambda e: plus_btn.config(bg="#3d7d3d"))
             plus_btn.bind('<Leave>', lambda e: plus_btn.config(bg="#2d5c2d"))
             minus_btn.bind('<Enter>', lambda e: minus_btn.config(bg="#7d2424"))
             minus_btn.bind('<Leave>', lambda e: minus_btn.config(bg="#5c2d2d"))
-            
+
         except Exception as e:
             log_error(e, "Error adding target selector")
 

@@ -33,9 +33,12 @@ src/utils/pycache/
 PyInstaller/spec files (used for creating executables)
 
 src/DeskMixer.spec
+DeskMixer.spec
 src/build/
+build/
 src/dist/config/
 src/dist/error.log
+DeskMixer.spec
 
 
 ----------------------------------------------------------------------

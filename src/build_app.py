@@ -9,8 +9,8 @@ def run_pyinstaller_build():
     
     # --- Configuration ---
     APP_NAME = "DeskMixer"
-    ICON_PATH = "icons/logo.png"
-    MAIN_SCRIPT = "main.py"
+    ICON_PATH = "src/icons/logo.png"
+    MAIN_SCRIPT = "src/main.py"
     
     # --- PyInstaller Execution Command (VENV/Standard FIX) ---
     PYTHON_EXEC = sys.executable 
