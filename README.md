@@ -1,0 +1,1 @@
+This is a project still in development inspired by <a href="https://github.com/omriharel/deej">Deej</a> which aims to provide a seamless experience for the user, adding functionality for binding buttons.
