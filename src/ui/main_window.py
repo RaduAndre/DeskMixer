@@ -1,7 +1,6 @@
-# ui/main_window.py
-
 import tkinter as tk
 from tkinter import ttk, messagebox
+from PIL import Image
 import threading
 import os
 import sys
@@ -39,20 +38,39 @@ class VolumeControllerUI:
         # Change the protocol for close button to self.hide_window
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
         # Bind the minimize event (iconify) to also hide the window
-        # The <Unmap> event fires when the window is iconified (minimized)
         self.root.bind("<Unmap>", self.on_minimize)
 
-    # Helper function to get the resource path for PyInstaller
     def get_resource_path(self, relative_path):
-        """Get absolute path to resource, works for dev and PyInstaller"""
+        """
+        Get absolute path to resource, works for dev and PyInstaller.
+        
+        Args:
+            relative_path: Path relative to src directory (e.g., 'icons/logo.png')
+        
+        Returns:
+            Absolute path to the resource
+        """
         if getattr(sys, 'frozen', False):
-            # When bundled, the icon file is available in the temp directory if added with --add-data
+            # Running as compiled executable
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
             base_path = sys._MEIPASS
         else:
-            # Get the directory containing this script file
+            # Running in development mode
+            # Get the src directory (parent of ui directory)
             base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
+        
         return os.path.join(base_path, relative_path)
+
+    def create_tray_image(self):
+        """Create a PIL image object for the tray icon."""
+        try:
+            # Load the icon using the resource path function
+            icon_path = self.get_resource_path('icons/logo.png')
+            return Image.open(icon_path)
+        except Exception as e:
+            log_error(e, "Could not load tray icon. Using default icon.")
+            # Create a simple, fallback image if the file is not found
+            return Image.new('RGB', (64, 64), color='darkgrey')
 
     def _initialize_window(self):
         """Initialize the main window properties"""
@@ -62,12 +80,12 @@ class VolumeControllerUI:
         
         # Load icon for the taskbar/window header
         try:
-            # Use the PyInstaller compatible resource path
+            # Use the resource path function
             icon_path = self.get_resource_path('icons/logo.png')
             self.icon_image = tk.PhotoImage(file=icon_path)
             self.root.iconphoto(True, self.icon_image)
         except Exception as e:
-            log_error(e, "Could not load window icon from'.")
+            log_error(e, "Could not load window icon.")
             
         self.root.minsize(800, 600)
 
@@ -120,7 +138,6 @@ class VolumeControllerUI:
 
             # Add tabs to notebook
             self.notebook.add(self.config_tab.frame, text="  Configuration  ")
-            #self.notebook.add(self.volume_tab.frame, text="  Volume Control  ")
             self.notebook.add(self.serial_tab.frame, text="  Serial Monitor  ")
 
         except Exception as e:
@@ -171,7 +188,7 @@ class VolumeControllerUI:
     def on_close(self):
         """Clean up and close the application, including the tray icon."""
         try:
-            # Check for unsaved changes (existing code)
+            # Check for unsaved changes
             if hasattr(self, 'config_tab') and self.config_tab.unsaved_changes:
                 response = messagebox.askyesnocancel(
                     "Unsaved Changes",

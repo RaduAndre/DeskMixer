@@ -9,8 +9,8 @@ def run_pyinstaller_build():
     
     # --- Configuration ---
     APP_NAME = "DeskMixer"
-    ICON_PATH = "src/icons/logo.png"
-    MAIN_SCRIPT = "src/main.py"
+    ICON_PATH = "icons/logo.png"  # Relative to src directory
+    MAIN_SCRIPT = "main.py"
     
     # --- PyInstaller Execution Command (VENV/Standard FIX) ---
     PYTHON_EXEC = sys.executable 
@@ -22,36 +22,28 @@ def run_pyinstaller_build():
         "--noconsole",
         f"--name={APP_NAME}",
         f"--icon={ICON_PATH}",
-        f"--add-data={ICON_PATH}:{os.path.dirname(ICON_PATH)}", 
+        # Add the entire icons directory to maintain structure
+        f"--add-data={ICON_PATH}{os.pathsep}icons",
         
         # --- FIX FOR SERIAL PORT AUTO-CONNECTION ---
-        # 1. Keep the standard list_ports import.
         "--hidden-import=serial.tools.list_ports",
-        # 2. Add the main 'serial' package for broader compatibility.
         "--hidden-import=serial", 
-        # 3. CRITICAL: Add the platform-specific internal backend for list_ports. 
-        #    This is what is often missed on Windows.
         "--hidden-import=serial.tools.list_ports_windows", 
         
         # --- Additional hidden imports for pystray and its dependencies ---
         "--hidden-import=pystray",
         "--hidden-import=pystray._win32", 
-        # Uncomment if you face Pillow errors:
-        # "--hidden-import=PIL", 
         
         MAIN_SCRIPT
     ]
     
-    # Print the command (starting from the executable name)
-    print_command_list = COMMAND[0:] 
-        
     print("=" * 60)
     print(f"Starting PyInstaller build for {APP_NAME}...")
-    print(f"Command: {' '.join(print_command_list)}")
+    print(f"Command: {' '.join(COMMAND)}")
     print("=" * 60)
     
     try:
-        # Run the command
+        # Run the command from the src directory
         process = subprocess.Popen(COMMAND, cwd=os.getcwd(), 
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
                                    universal_newlines=True)
@@ -80,4 +72,8 @@ def run_pyinstaller_build():
         print(f"\nAn unexpected error occurred during the build process: {e}")
 
 if __name__ == "__main__":
+    # Ensure we're running from the src directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(script_dir)
+    print(f"Working directory: {os.getcwd()}")
     run_pyinstaller_build()

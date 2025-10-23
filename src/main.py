@@ -2,9 +2,7 @@
 
 import tkinter as tk
 import pystray
-from PIL import Image
 import threading
-import os
 import sys
 
 # Windows-specific imports for single instance check
@@ -19,26 +17,7 @@ except ImportError:
 from ui.main_window import VolumeControllerUI
 from utils.error_handler import setup_error_handling, log_error
 
-# Helper function to get the resource path for PyInstaller
-def get_resource_path(relative_path):
-    """Get absolute path to resource, works for dev and PyInstaller"""
-    if getattr(sys, 'frozen', False):
-        # When bundled, the icon file is available in the temp directory if added with --add-data
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("."), relative_path)
-
-# --- TRAY ICON FUNCTIONS ---
-
-def create_image():
-    """Create a PIL image object for the tray icon."""
-    try:
-        # Load the icon from the bundled location
-        icon_path = get_resource_path('src/icons/logo.png')
-        return Image.open(icon_path)
-    except Exception as e:
-        log_error(e, "Could not load tray icon from 'icons/logo.png'. Using default icon.")
-        # Create a simple, fallback image if the file is not found
-        return Image.new('RGB', (64, 64), color = 'darkgrey')
+# --- TRAY ICON CALLBACK FUNCTIONS ---
 
 def on_quit_callback(icon, item):
     """Handles the Quit menu item."""
@@ -51,12 +30,14 @@ def on_show_window_callback(icon, item):
     if hasattr(icon, 'ui_app'):
         # Show the window on the tkinter thread
         icon.ui_app.root.after(0, icon.ui_app.show_window)
-        
+
 # A constant for the mutex name
 SINGLE_INSTANCE_MUTEX_NAME = "Global\\DeskMixer_SingleInstanceMutex"
 
 def run_app():
-    # 0. NEW: Check for a single instance using a named Mutex (Windows only)
+    """Main application entry point"""
+    
+    # 0. Check for a single instance using a named Mutex (Windows only)
     mutex = None
     if HAS_WIN32_MUTEX:
         try:
@@ -72,10 +53,13 @@ def run_app():
             
     # 1. Initialize Tkinter
     root = tk.Tk()
-    root.withdraw() # Start with the window hidden initially
+    root.withdraw()  # Start with the window hidden initially
 
-    # 2. Create the System Tray Icon
-    icon_image = create_image()
+    # 2. Initialize the UI first (without tray icon reference)
+    ui_app = VolumeControllerUI(root, tray_icon=None)
+
+    # 3. Create the System Tray Icon using the UI's create_tray_image method
+    icon_image = ui_app.create_tray_image()
     menu = (
         pystray.MenuItem('Show Window', on_show_window_callback, default=True),
         pystray.MenuItem('Quit', on_quit_callback)
@@ -85,16 +69,15 @@ def run_app():
     # Set the action for double-click on the tray icon
     icon.activate = on_show_window_callback
 
-    # 3. Initialize the UI (passing the icon object)
-    ui_app = VolumeControllerUI(root, tray_icon=icon)
-    icon.ui_app = ui_app # Attach app instance to icon for callbacks
+    # 4. Attach the tray icon to the UI app (now that it's created)
+    ui_app.tray_icon = icon
+    icon.ui_app = ui_app  # Attach app instance to icon for callbacks
 
-    # 4. Start the Tray Icon on a separate thread
+    # 5. Start the Tray Icon on a separate thread
     tray_thread = threading.Thread(target=icon.run, daemon=True)
     tray_thread.start()
 
-    # 5. NEW: Respect the 'Start Hidden (in Tray)' setting from config
-    # Access the start_in_tray from the serial_section
+    # 6. Respect the 'Start Hidden (in Tray)' setting from config
     if hasattr(ui_app.config_tab, 'serial_section') and ui_app.config_tab.serial_section:
         start_hidden = ui_app.config_tab.serial_section.start_in_tray.get()
     else:
@@ -108,10 +91,10 @@ def run_app():
         # User wants the window hidden in the tray on startup
         ui_app.root.after(100, ui_app.hide_window) 
 
-    # Start the main UI loop
+    # 7. Start the main UI loop
     root.mainloop()
     
-    # NEW: Release the mutex when the app closes
+    # 8. Release the mutex when the app closes
     if mutex and HAS_WIN32_MUTEX:
         try:
             win32api.CloseHandle(mutex)

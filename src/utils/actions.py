@@ -248,7 +248,7 @@ class ActionHandler:
             # Try to launch the application
             # This supports both full paths (e.g., "C:\Program Files\App\app.exe")
             # and simple names (e.g., "notepad", "calc")
-            subprocess.Popen(app_path, shell=False)
+            subprocess.Popen(app_path, shell=True)
             return True
 
         except Exception as e:
