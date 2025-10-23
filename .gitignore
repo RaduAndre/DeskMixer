@@ -6,14 +6,14 @@
 
 IDE-specific directories (IntelliJ/PyCharm/WebStorm, etc.)
 
-.idea/
+src/.idea/
 
 Virtual Environments
 
-.venv/
-env/
-venv/
-Venv/
+src/.venv/
+src/env/
+src/venv/
+src/Venv/
 
 ----------------------------------------------------------------------
 
@@ -23,18 +23,18 @@ Venv/
 
 Python bytecode/cache directories
 
-audio/pycache/
-serial_comm/pycache/
-ui/pycache/
-utils/pycache/
+src/audio/pycache/
+src/serial_comm/pycache/
+src/ui/pycache/
+src/utils/pycache/
 *.pyc
 
 PyInstaller/spec files (used for creating executables)
 
-DeskMixer.spec
-build/
-dist/config/
-dist/error.log
+src/DeskMixer.spec
+src/build/
+src/dist/config/
+src/dist/error.log
 
 ----------------------------------------------------------------------
 
@@ -44,11 +44,11 @@ dist/error.log
 
 Log files
 
-error.log
-config/error.log
+src/error.log
+src/config/error.log
 
 Local configuration files that should not be shared or tracked
 
 (especially if they contain secrets or local paths)
 
-config/config.json
+src/config/config.json
