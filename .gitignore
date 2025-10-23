@@ -37,7 +37,9 @@ DeskMixer.spec
 src/build/
 build/
 src/dist/config/
+dist/config/
 src/dist/error.log
+dist/error.log
 DeskMixer.spec
 
 
