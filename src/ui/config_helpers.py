@@ -24,7 +24,8 @@ class ConfigHelpers:
             "🔉 Volume Down",
             "🔇 Mute",
             "🔀 Switch Audio Output",
-            "⌨️ Keybind (Custom)"
+            "⌨️ Keybind (Custom)",
+            "🚀 Launch App"
         ]
 
     def normalize_action_name(self, display_name):
@@ -41,7 +42,8 @@ class ConfigHelpers:
             "🔉 Volume Down": "volume_down",
             "🔇 Mute": "mute",
             "🔀 Switch Audio Output": "switch_audio_output",
-            "⌨️ Keybind (Custom)": "keybind"
+            "⌨️ Keybind (Custom)": "keybind",
+            "🚀 Launch App": "launch_app"
         }
         return action_map.get(display_name.strip(), display_name)
 
@@ -59,7 +61,8 @@ class ConfigHelpers:
             "volume_down": "🔉 Volume Down",
             "mute": "🔇 Mute",
             "switch_audio_output": "🔀 Switch Audio Output",
-            "keybind": "⌨️ Keybind (Custom)"
+            "keybind": "⌨️ Keybind (Custom)",
+            "launch_app": "🚀 Launch App"
         }
         return display_map.get(internal_name, internal_name)
     

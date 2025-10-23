@@ -7,6 +7,7 @@
 IDE-specific directories (IntelliJ/PyCharm/WebStorm, etc.)
 
 src/.idea/
+.idea/
 
 Virtual Environments
 
@@ -36,6 +37,7 @@ src/build/
 src/dist/config/
 src/dist/error.log
 
+
 ----------------------------------------------------------------------
 
 3. Local Configuration and Logs (Secret/Ephemeral Data)
@@ -44,6 +46,7 @@ src/dist/error.log
 
 Log files
 
+error.log
 src/error.log
 src/config/error.log
 

@@ -33,7 +33,7 @@ def create_image():
     """Create a PIL image object for the tray icon."""
     try:
         # Load the icon from the bundled location
-        icon_path = get_resource_path('icons/logo.png')
+        icon_path = get_resource_path('src/icons/logo.png')
         return Image.open(icon_path)
     except Exception as e:
         log_error(e, "Could not load tray icon from 'icons/logo.png'. Using default icon.")

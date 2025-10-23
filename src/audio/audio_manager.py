@@ -374,6 +374,7 @@ class AudioManager:
             action = binding.get('action')
             target = binding.get('target')
             keybind = binding.get('keybind')
+            app_path = binding.get('app_path')  # ADD THIS LINE
             
             from utils.actions import ActionHandler
             action_handler = ActionHandler(self)
@@ -383,6 +384,8 @@ class AudioManager:
                 kwargs['target'] = target
             if keybind:
                 kwargs['keys'] = keybind
+            if app_path:  # ADD THESE TWO LINES
+                kwargs['app_path'] = app_path
                 
             action_handler.execute_action(action, **kwargs)
 

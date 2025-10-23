@@ -45,6 +45,7 @@ class ActionHandler:
                 'mute': self.mute,
                 'switch_audio_output': self.switch_audio_output,
                 'keybind': self.press_keybind,
+                'launch_app': self.launch_app,
             }
 
             action = action_map.get(action_type)
@@ -221,6 +222,37 @@ class ActionHandler:
 
         except Exception as e:
             log_error(e, f"Error pressing keybind: {keys}")
+            return False
+
+    def launch_app(self, app_path=None):
+        """Launch an application by path or name"""
+        try:
+            if not app_path:
+                log_error(ValueError("No app path provided"), "Cannot launch app")
+                return False
+
+            # Strip whitespace
+            app_path = app_path.strip()
+            
+            if not app_path:
+                log_error(ValueError("Empty app path provided"), "Cannot launch app")
+                return False
+
+            # Handle paths with quotes - remove them for proper subprocess handling
+            # Supports: "C:\Program Files\App\app.exe" -> C:\Program Files\App\app.exe
+            if app_path.startswith('"') and app_path.endswith('"'):
+                app_path = app_path[1:-1]
+            elif app_path.startswith("'") and app_path.endswith("'"):
+                app_path = app_path[1:-1]
+
+            # Try to launch the application
+            # This supports both full paths (e.g., "C:\Program Files\App\app.exe")
+            # and simple names (e.g., "notepad", "calc")
+            subprocess.Popen(app_path, shell=False)
+            return True
+
+        except Exception as e:
+            log_error(e, f"Error launching app: {app_path}")
             return False
 
     def _send_media_key(self, vk_code):

@@ -117,11 +117,13 @@ class ConfigButtonSection:
                 action = binding.get('action', '')
                 target = binding.get('target', '')
                 keybind = binding.get('keybind', '')
+                app_path = binding.get('app_path', '')
             else:
                 # Handle legacy format where binding was just the action
                 action = binding
                 target = ''
                 keybind = ''
+                app_path = ''
 
             # Only add valid button bindings
             if button_name and action:
@@ -129,10 +131,11 @@ class ConfigButtonSection:
                     button_name=button_name,
                     action=action,
                     target=target,
-                    keybind=keybind
+                    keybind=keybind,
+                    app_path=app_path
                 )
 
-    def _auto_save_button_binding(self, button_entry, action_combo, target_combo, keybind_entry):
+    def _auto_save_button_binding(self, button_entry, action_combo, target_combo, keybind_entry, app_path_entry):
         """Automatically save button binding when changes occur."""
         try:
             button_name = button_entry.get().strip()
@@ -152,11 +155,17 @@ class ConfigButtonSection:
             if action == "keybind" and keybind_entry.winfo_ismapped():
                  keybind = keybind_entry.get().strip()
             
+            # App path is only relevant for "launch_app" action, and only if the entry is mapped
+            app_path = None
+            if action == "launch_app" and app_path_entry.winfo_ismapped():
+                app_path = app_path_entry.get().strip()
+            
             # Prepare binding data
             binding_data = {
                 'action': action,
                 'target': target if target and target != "None" else None,
-                'keybind': keybind if keybind else None
+                'keybind': keybind if keybind else None,
+                'app_path': app_path if app_path else None
             }
 
             # Save binding
@@ -169,7 +178,7 @@ class ConfigButtonSection:
             log_error(e, "Error auto-saving button binding")
             return False
 
-    def _add_button_binding_row(self, button_name="", action="", target="", keybind=""):
+    def _add_button_binding_row(self, button_name="", action="", target="", keybind="", app_path=""):
         """Add a button binding row with responsive layout"""
         try:
             row_frame = tk.Frame(self.button_container, bg="#353535", padx=6, pady=4)
@@ -192,13 +201,6 @@ class ConfigButtonSection:
             button_entry = tk.Entry(row_frame, width=8, font=("Arial", 9))
             button_entry.insert(0, button_name)
             button_entry.grid(row=0, column=1, padx=2, sticky="w")
-            
-            # BIND AUTO-SAVE TO BUTTON NAME ENTRY
-            button_entry.bind('<FocusOut>', 
-                lambda e: self._auto_save_button_binding(
-                    button_entry, action_combo, target_combo, keybind_entry
-                )
-            )
 
             tk.Label(
                 row_frame,
@@ -256,13 +258,6 @@ class ConfigButtonSection:
                 width=15,
                 font=("Arial", 9)
             )
-            
-            # BIND AUTO-SAVE TO TARGET COMBO
-            target_combo.bind('<<ComboboxSelected>>', 
-                lambda e: self._auto_save_button_binding(
-                    button_entry, action_combo, target_combo, keybind_entry
-                )
-            )
 
             if target:
                 display_target = self.helpers.get_display_name(target)
@@ -280,11 +275,42 @@ class ConfigButtonSection:
             keybind_entry = tk.Entry(dynamic_frame, width=15, font=("Arial", 9))
             if keybind and isinstance(keybind, str):
                 keybind_entry.insert(0, keybind)
-                
-            # BIND AUTO-SAVE TO KEYBIND ENTRY
+
+            # App path entry (shown when action is launch_app)
+            app_path_label = tk.Label(
+                dynamic_frame,
+                text="Path:",
+                bg="#353535",
+                fg="white",
+                font=("Arial", 9)
+            )
+
+            app_path_entry = tk.Entry(dynamic_frame, width=25, font=("Arial", 9))
+            if app_path and isinstance(app_path, str):
+                app_path_entry.insert(0, app_path)
+
+            # BIND AUTO-SAVE TO ALL ENTRIES
+            button_entry.bind('<FocusOut>', 
+                lambda e: self._auto_save_button_binding(
+                    button_entry, action_combo, target_combo, keybind_entry, app_path_entry
+                )
+            )
+            
+            target_combo.bind('<<ComboboxSelected>>', 
+                lambda e: self._auto_save_button_binding(
+                    button_entry, action_combo, target_combo, keybind_entry, app_path_entry
+                )
+            )
+            
             keybind_entry.bind('<FocusOut>', 
                 lambda e: self._auto_save_button_binding(
-                    button_entry, action_combo, target_combo, keybind_entry
+                    button_entry, action_combo, target_combo, keybind_entry, app_path_entry
+                )
+            )
+            
+            app_path_entry.bind('<FocusOut>', 
+                lambda e: self._auto_save_button_binding(
+                    button_entry, action_combo, target_combo, keybind_entry, app_path_entry
                 )
             )
 
@@ -302,11 +328,14 @@ class ConfigButtonSection:
                 elif action_name == "mute":
                     target_label.pack(side="left", padx=2)
                     target_combo.pack(side="left", padx=2)
+                elif action_name == "launch_app":
+                    app_path_label.pack(side="left", padx=2)
+                    app_path_entry.pack(side="left", padx=2)
 
             # BIND AUTO-SAVE TO ACTION COMBO AND CALL on_action_change
             action_combo.bind('<<ComboboxSelected>>', 
                 lambda e: (on_action_change(e), self._auto_save_button_binding(
-                    button_entry, action_combo, target_combo, keybind_entry
+                    button_entry, action_combo, target_combo, keybind_entry, app_path_entry
                 ))
             )
 
@@ -323,7 +352,8 @@ class ConfigButtonSection:
                 command=lambda: self._test_button_action(
                     self.helpers.normalize_action_name(action_var.get()),
                     self.helpers.normalize_target_name(target_var.get()) if target_var.get() else "",
-                    keybind_entry.get()
+                    keybind_entry.get(),
+                    app_path_entry.get()
                 ),
                 bg="#404040",
                 fg="white",
@@ -355,7 +385,7 @@ class ConfigButtonSection:
         except Exception as e:
             log_error(e, "Error adding button binding row")
             
-    def _test_button_action(self, action, target, keybind):
+    def _test_button_action(self, action, target, keybind, app_path):
         """Test a button action"""
         try:
             from utils.actions import ActionHandler # Assuming this import is correct
@@ -367,6 +397,8 @@ class ConfigButtonSection:
                 kwargs['target'] = target
             elif action == "keybind" and keybind:
                 kwargs['keys'] = keybind
+            elif action == "launch_app" and app_path:
+                kwargs['app_path'] = app_path
 
             success = action_handler.execute_action(action, **kwargs)
 

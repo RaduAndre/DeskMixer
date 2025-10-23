@@ -42,16 +42,16 @@ class VolumeControllerUI:
         # The <Unmap> event fires when the window is iconified (minimized)
         self.root.bind("<Unmap>", self.on_minimize)
 
-    def _get_resource_path(self, relative_path):
+    # Helper function to get the resource path for PyInstaller
+    def get_resource_path(self, relative_path):
         """Get absolute path to resource, works for dev and PyInstaller"""
         if getattr(sys, 'frozen', False):
-            # Running in a bundle, resources are available relative to the executable
-            # The icon file must be added to the bundle with --add-data
+            # When bundled, the icon file is available in the temp directory if added with --add-data
             base_path = sys._MEIPASS
         else:
-            base_path = os.path.abspath(".")
+            # Get the directory containing this script file
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-        # The relative path should be 'icons/logo.png'
         return os.path.join(base_path, relative_path)
 
     def _initialize_window(self):
@@ -63,11 +63,11 @@ class VolumeControllerUI:
         # Load icon for the taskbar/window header
         try:
             # Use the PyInstaller compatible resource path
-            icon_path = self._get_resource_path('icons/logo.png')
+            icon_path = self.get_resource_path('icons/logo.png')
             self.icon_image = tk.PhotoImage(file=icon_path)
             self.root.iconphoto(True, self.icon_image)
         except Exception as e:
-            log_error(e, "Could not load window icon from 'icons/logo.png'.")
+            log_error(e, "Could not load window icon from'.")
             
         self.root.minsize(800, 600)
 
@@ -120,7 +120,7 @@ class VolumeControllerUI:
 
             # Add tabs to notebook
             self.notebook.add(self.config_tab.frame, text="  Configuration  ")
-            self.notebook.add(self.volume_tab.frame, text="  Volume Control  ")
+            #self.notebook.add(self.volume_tab.frame, text="  Volume Control  ")
             self.notebook.add(self.serial_tab.frame, text="  Serial Monitor  ")
 
         except Exception as e:
