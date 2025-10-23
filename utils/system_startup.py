@@ -27,7 +27,7 @@ def set_startup(should_start):
         return False
         
     RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-    APP_NAME = "DeskMix"
+    APP_NAME = "DeskMixer"
     
     try:
         # Use KEY_SET_VALUE to gain write access (needed for both set and delete)
@@ -60,7 +60,7 @@ def check_startup_status():
         return False
         
     RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-    APP_NAME = "DeskMix"
+    APP_NAME = "DeskMixer"
     
     try:
         # Open key for read access

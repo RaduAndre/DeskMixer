@@ -31,7 +31,7 @@ utils/pycache/
 
 PyInstaller/spec files (used for creating executables)
 
-DesjMix.spec
+DesjMixer.spec
 build/
 dist/config/
 dist/error.log

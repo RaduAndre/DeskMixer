@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 from utils.error_handler import log_error
 
 
@@ -11,13 +12,22 @@ class ConfigManager:
     def __init__(self, config_file="config.json"):
         self.config_file = config_file
         
-        # Use os.getcwd() to ensure the 'config' folder is created 
-        # in the same directory as the executable, keeping it external.
-        self.config_dir = os.path.join(os.getcwd(), "config")
+        # Get the directory where the executable is located
+        if getattr(sys, 'frozen', False):
+            # Running as compiled executable
+            app_dir = os.path.dirname(sys.executable)
+        else:
+            # Running as script
+            app_dir = os.path.dirname(os.path.abspath(__file__))
+            # Go up one level if we're in a subdirectory
+            if os.path.basename(app_dir) == 'config':
+                app_dir = os.path.dirname(app_dir)
+        
+        self.config_dir = os.path.join(app_dir, "config")
         self.config_path = os.path.join(self.config_dir, self.config_file)
         
         self.config = {}
-        self.has_changes = False  # Add this flag to track changes
+        self.has_changes = False
 
         # Create config directory if it doesn't exist
         if not os.path.exists(self.config_dir):
@@ -33,10 +43,10 @@ class ConfigManager:
                 with open(self.config_path, 'r') as f:
                     self.config = json.load(f)
             else:
-                self.config = {}  # Initialize with an empty dictionary
+                self.config = {}
         except Exception as e:
-            log_error(e, "Error loading configuration")
-            self.config = {}  # Ensure config is initialized even on error
+            log_error(e, f"Error loading configuration from {self.config_path}")
+            self.config = {}
         return self.config
 
     def save_config(self):
@@ -51,7 +61,7 @@ class ConfigManager:
                 
             return True
         except Exception as e:
-            log_error(e, "Error saving configuration")
+            log_error(e, f"Error saving configuration to {self.config_path}")
             return False
 
     def add_binding(self, var_name, app_names):
@@ -94,7 +104,7 @@ class ConfigManager:
             if set(current_apps) != set(app_names):
                 self.config['variable_bindings'][var_name] = app_names
                 self.has_changes = True
-                self.save_config()  # Save immediately for individual binding changes
+                self.save_config()
                 return True
                 
             return False
@@ -108,7 +118,7 @@ class ConfigManager:
         try:
             if 'variable_bindings' in self.config and var_name in self.config['variable_bindings']:
                 del self.config['variable_bindings'][var_name]
-                self.save_config()  # Save immediately after removal
+                self.save_config()
                 return True
             return False
         except Exception as e:
@@ -128,7 +138,7 @@ class ConfigManager:
             if current != binding_data:
                 self.config['button_bindings'][button_name] = binding_data
                 self.has_changes = True
-                self.save_config()  # Save immediately for individual binding changes
+                self.save_config()
                 return True
                 
             return False
@@ -151,7 +161,6 @@ class ConfigManager:
             self.config['last_connected_baud'] = str(baud)
             self.has_changes = True
 
-    # --- GLOBAL MODE SETTING ---
     def set_slider_sampling(self, mode):
         """Set the global volume control mode for all bindings"""
         valid_modes = ['soft', 'normal', 'hard']
@@ -171,7 +180,6 @@ class ConfigManager:
         """Get the global volume control mode"""
         return self.config.get('slider_sampling', default)
 
-    # --- CHECKBOX SETTINGS ---
     def set_start_in_tray(self, value):
         """Set the value for the start_in_tray config key."""
         key = 'start_in_tray'
