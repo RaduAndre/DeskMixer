@@ -37,7 +37,7 @@ A physical volume mixer with programmable buttons for Windows, inspired by [Deej
 
 #### Option 1: Pre-built Executable (Windows)
 1. Releases will be uploaded on the [Releases](../../releases) page
-2. For now you can build the code or download and run `DeskMixer.exe` from the `src/dist/` folder
+2. For now you can build the code or download and run `DeskMixer.exe` from the [src/dist/](src/dist/) folder
 
 #### Option 2: Run from Source
 1. Clone the repository:

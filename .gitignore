@@ -32,7 +32,7 @@ src/ui/pycache/
 src/utils/pycache/
 *.pyc
 
-PyInstaller/spec files (used for creating executables)
+PyInstaller/Nuika/spec files (used for creating executables)
 
 src/DeskMixer.spec
 DeskMixer.spec
@@ -43,6 +43,10 @@ dist/config/
 src/dist/error.log
 dist/error.log
 src/nuitka-crash-report.xml
+src/main.build
+src/main.dist
+src/main.onefile-build
+
 
 
 

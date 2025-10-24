@@ -20,9 +20,11 @@ def run_nuitka_build():
     # Nuitka arguments (split into a list for subprocess)
     COMMAND = NUITKA_COMMAND_BASE + [
         # Basic compilation options
-        "--standalone",  # Create a standalone executable with all dependencies
-        "--onefile",  # Create a single executable file
+        "--onefile",
+        # This creates a folder with DeskMixer.exe + dependencies
         "--msvc=latest",  # Instruct Nuitka to use the latest installed MSVC
+        # "--mingw64"
+        "--enable-plugin=tk-inter",
 
         # Windows-specific options
         "--windows-disable-console",  # No console window (GUI app)
@@ -41,6 +43,10 @@ def run_nuitka_build():
         "--include-module=serial.tools.list_ports_windows",
         "--include-package=pystray",
         "--include-module=pystray._win32",
+
+        # Include config module explicitly
+        "--include-package=config",
+        "--include-module=config.config_manager",
 
         # Windows-specific imports
         "--include-module=win32file",
