@@ -2,20 +2,21 @@ import subprocess
 import sys
 import os
 
+
 def run_pyinstaller_build():
     """
     Runs the PyInstaller command to build the DeskMix executable.
     """
-    
+
     # --- Configuration ---
     APP_NAME = "DeskMixer"
-    ICON_PATH = "icons/logo.png"  # Relative to src directory
+    ICON_PATH = "icons/logo.ico"  # Relative to src directory
     MAIN_SCRIPT = "main.py"
-    
+
     # --- PyInstaller Execution Command (VENV/Standard FIX) ---
-    PYTHON_EXEC = sys.executable 
+    PYTHON_EXEC = sys.executable
     PYINSTALLER_COMMAND_BASE = [PYTHON_EXEC, "-m", "PyInstaller"]
-    
+
     # PyInstaller arguments (split into a list for subprocess)
     COMMAND = PYINSTALLER_COMMAND_BASE + [
         "--onefile",
@@ -23,37 +24,37 @@ def run_pyinstaller_build():
         f"--name={APP_NAME}",
         f"--icon={ICON_PATH}",
         # Add the entire icons directory to maintain structure
-        f"--add-data={ICON_PATH}{os.pathsep}icons",
-        
+        f"--add-data=icons{os.pathsep}icons",
+
         # --- FIX FOR SERIAL PORT AUTO-CONNECTION ---
         "--hidden-import=serial.tools.list_ports",
-        "--hidden-import=serial", 
-        "--hidden-import=serial.tools.list_ports_windows", 
-        
+        "--hidden-import=serial",
+        "--hidden-import=serial.tools.list_ports_windows",
+
         # --- Additional hidden imports for pystray and its dependencies ---
         "--hidden-import=pystray",
-        "--hidden-import=pystray._win32", 
-        
+        "--hidden-import=pystray._win32",
+
         MAIN_SCRIPT
     ]
-    
+
     print("=" * 60)
     print(f"Starting PyInstaller build for {APP_NAME}...")
     print(f"Command: {' '.join(COMMAND)}")
     print("=" * 60)
-    
+
     try:
         # Run the command from the src directory
-        process = subprocess.Popen(COMMAND, cwd=os.getcwd(), 
-                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+        process = subprocess.Popen(COMMAND, cwd=os.getcwd(),
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                    universal_newlines=True)
-        
+
         # Stream output to console in real-time
         for line in process.stdout:
             print(line, end='')
-            
+
         process.wait()
-        
+
         if process.returncode == 0:
             print("=" * 60)
             print(f"SUCCESS: {APP_NAME} build finished!")
@@ -70,6 +71,7 @@ def run_pyinstaller_build():
         print(f"Please verify that the current environment is active and PyInstaller is installed.")
     except Exception as e:
         print(f"\nAn unexpected error occurred during the build process: {e}")
+
 
 if __name__ == "__main__":
     # Ensure we're running from the src directory

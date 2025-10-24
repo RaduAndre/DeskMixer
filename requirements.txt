@@ -20,3 +20,4 @@ psutil>=5.9.0
 
 # Build Tool (optional - for creating executable)
 pyinstaller>=6.0.0
+nuitka>=2.8.4

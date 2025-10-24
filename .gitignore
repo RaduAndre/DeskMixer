@@ -11,6 +11,8 @@ src/.idea/
 
 Virtual Environments
 
+.venv
+.venv1
 src/.venv/
 src/env/
 src/venv/
@@ -40,6 +42,7 @@ src/dist/config/
 dist/config/
 src/dist/error.log
 dist/error.log
+src/nuitka-crash-report.xml
 
 
 
