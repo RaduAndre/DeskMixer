@@ -7,10 +7,12 @@ try:
     import win32con
     import win32event
     import pywintypes
+    import serial.tools.list_ports as serial_list_ports
 
     WINDOWS_AVAILABLE = True
 except ImportError:
     WINDOWS_AVAILABLE = False
+    serial_list_ports = None
 
 
 class SerialHandler:
@@ -21,8 +23,14 @@ class SerialHandler:
         self.connected = False
         self.reading = False
         self.read_thread = None
+        self.reconnect_thread = None
         self.callbacks = []
         self.port = None
+        self.baud_rate = 9600
+        self.disconnect_callbacks = []
+        self.reconnect_callbacks = []
+        self.attempting_reconnect = False
+        self.stop_reconnect = False
 
     def connect(self, port, baud_rate=9600):
         """Connect to serial port"""
@@ -36,6 +44,7 @@ class SerialHandler:
                 port = f'\\\\.\\{port}'
 
             self.port = port
+            self.baud_rate = baud_rate
 
             # Open serial port using Windows API with overlapped I/O for non-blocking
             self.serial_handle = win32file.CreateFile(
@@ -72,6 +81,7 @@ class SerialHandler:
                                 win32file.PURGE_RXCLEAR | win32file.PURGE_TXCLEAR)
 
             self.connected = True
+            self.attempting_reconnect = False
             self.start_reading()
             return True
 
@@ -100,12 +110,25 @@ class SerialHandler:
     def disconnect(self):
         """Disconnect from serial port"""
         try:
+            # Stop reconnection attempts
+            self.stop_reconnect = True
+            self.attempting_reconnect = False
+
+            # Stop reading thread
             self.reading = False
             if self.read_thread:
                 self.read_thread.join(timeout=2)
 
+            # Stop reconnection thread
+            if self.reconnect_thread and self.reconnect_thread.is_alive():
+                self.reconnect_thread.join(timeout=2)
+
+            # Close serial handle
             if self.serial_handle:
-                win32file.CloseHandle(self.serial_handle)
+                try:
+                    win32file.CloseHandle(self.serial_handle)
+                except:
+                    pass
                 self.serial_handle = None
 
             self.connected = False
@@ -157,15 +180,123 @@ class SerialHandler:
                     time.sleep(0.01)
 
             except pywintypes.error as e:
-                if e.args[0] == 995:  # Operation aborted (normal during disconnect)
+                error_code = e.args[0]
+
+                # Handle physical disconnection
+                if error_code in (5, 22, 995,
+                                  1167):  # Access denied, invalid function, operation aborted, device not connected
+                    log_error(e, f"Device physically disconnected (error {error_code})")
+                    self._handle_physical_disconnect()
                     break
-                log_error(e, "Error reading from serial port")
+
+                log_error(e, f"Error reading from serial port (error {error_code})")
                 time.sleep(0.1)
+
             except Exception as e:
                 log_error(e, "Error reading from serial port")
                 time.sleep(0.1)
 
-        win32file.CloseHandle(overlapped.hEvent)
+        try:
+            win32file.CloseHandle(overlapped.hEvent)
+        except:
+            pass
+
+    def _handle_physical_disconnect(self):
+        """Handle physical device disconnection"""
+        try:
+            # Mark as disconnected
+            self.connected = False
+            self.reading = False
+
+            # Clean up handle
+            if self.serial_handle:
+                try:
+                    win32file.CloseHandle(self.serial_handle)
+                except:
+                    pass
+                self.serial_handle = None
+
+            # Notify disconnect callbacks (update UI)
+            for callback in self.disconnect_callbacks:
+                try:
+                    callback()
+                except Exception as e:
+                    log_error(e, "Error in disconnect callback")
+
+            # Start reconnection attempts if not manually stopped
+            if not self.stop_reconnect and self.port and self.baud_rate:
+                self._start_reconnection()
+
+        except Exception as e:
+            log_error(e, "Error handling physical disconnect")
+
+    def _start_reconnection(self):
+        """Start automatic reconnection attempts"""
+        if self.attempting_reconnect:
+            return
+
+        self.attempting_reconnect = True
+        self.stop_reconnect = False
+        self.reconnect_thread = threading.Thread(target=self._reconnect_loop, daemon=True)
+        self.reconnect_thread.start()
+
+    def _reconnect_loop(self):
+        """Attempt to reconnect to the device"""
+        reconnect_interval = 2  # seconds between attempts
+        max_attempts = 30  # try for 1 minute
+        attempt = 0
+
+        log_error(Exception("Starting auto-reconnection"), f"Attempting to reconnect to {self.port}")
+
+        while self.attempting_reconnect and not self.stop_reconnect and attempt < max_attempts:
+            attempt += 1
+
+            try:
+                # Check if the port is available again
+                if serial_list_ports:
+                    available_ports = [p.device for p in serial_list_ports.comports()]
+                    port_name = self.port.replace('\\\\.\\', '')
+
+                    if port_name in available_ports:
+                        log_error(Exception("Port detected"),
+                                  f"Port {port_name} is available, attempting reconnection...")
+
+                        # Try to reconnect
+                        if self.connect(port_name, self.baud_rate):
+                            log_error(Exception("Reconnection successful"), f"Successfully reconnected to {port_name}")
+
+                            # Notify reconnect callbacks (update UI)
+                            for callback in self.reconnect_callbacks:
+                                try:
+                                    callback()
+                                except Exception as e:
+                                    log_error(e, "Error in reconnect callback")
+
+                            self.attempting_reconnect = False
+                            return
+                        else:
+                            log_error(Exception("Reconnection failed"),
+                                      f"Failed to reconnect (attempt {attempt}/{max_attempts})")
+
+            except Exception as e:
+                log_error(e, f"Error during reconnection attempt {attempt}")
+
+            # Wait before next attempt
+            time.sleep(reconnect_interval)
+
+        self.attempting_reconnect = False
+        if attempt >= max_attempts:
+            log_error(Exception("Reconnection abandoned"), f"Failed to reconnect after {max_attempts} attempts")
+
+    def add_disconnect_callback(self, callback):
+        """Add callback to be called when device disconnects"""
+        if callback not in self.disconnect_callbacks:
+            self.disconnect_callbacks.append(callback)
+
+    def add_reconnect_callback(self, callback):
+        """Add callback to be called when device reconnects"""
+        if callback not in self.reconnect_callbacks:
+            self.reconnect_callbacks.append(callback)
 
     def _process_data(self, data):
         """Process received data"""
@@ -173,9 +304,9 @@ class SerialHandler:
             # Clean up and validate data
             if not data:
                 return
-                
+
             clean_data = data.strip()
-            
+
             # Handle button data immediately
             if clean_data.startswith('b'):
                 parts = clean_data.split()
@@ -188,7 +319,7 @@ class SerialHandler:
             # Handle slider data (pipe-separated format)
             if '|' not in clean_data:
                 return
-                
+
             # Validate slider data format
             parts = clean_data.split('|')
             valid_data = True
