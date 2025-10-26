@@ -42,6 +42,35 @@ class ActionHandler:
         except ImportError:
             self.has_win32 = False
 
+    def _run_powershell_hidden(self, command, timeout=10):
+        """Run PowerShell command with hidden window - same as output_switch.py"""
+        if platform.system() == "Windows":
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = subprocess.SW_HIDE
+
+            creation_flags = CREATE_NO_WINDOW
+            if hasattr(subprocess, 'CREATE_NO_WINDOW'):
+                creation_flags |= subprocess.CREATE_NO_WINDOW
+
+            return subprocess.run(
+                ["powershell.exe", "-WindowStyle", "Hidden", "-NoProfile",
+                 "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                startupinfo=si,
+                creationflags=creation_flags,
+                shell=False
+            )
+        else:
+            return subprocess.run(
+                ["powershell", "-Command", command],
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+
     def _check_audio_cmdlets(self):
         """Check if AudioDeviceCmdlets is installed on Windows"""
         if self._audio_cmdlets_checked:
@@ -53,18 +82,25 @@ class ActionHandler:
             return True
 
         try:
-            ps_command = "Get-Module -ListAvailable -Name AudioDeviceCmdlets"
-            result = subprocess.run(
-                ["powershell", "-Command", ps_command],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            # Use simpler, faster command that won't timeout
+            ps_command = "Get-Module -ListAvailable AudioDeviceCmdlets | Select-Object -First 1 -ExpandProperty Name"
+            result = self._run_powershell_hidden(ps_command, timeout=8)
 
             self._audio_cmdlets_checked = True
-            self._audio_cmdlets_available = result.returncode == 0 and result.stdout.strip() != ""
+            self._audio_cmdlets_available = (
+                result.returncode == 0 and
+                "AudioDeviceCmdlets" in result.stdout
+            )
             return self._audio_cmdlets_available
 
+        except subprocess.TimeoutExpired:
+            log_error(
+                TimeoutError("PowerShell command timed out"),
+                "AudioDeviceCmdlets check timed out - assuming not installed"
+            )
+            self._audio_cmdlets_checked = True
+            self._audio_cmdlets_available = False
+            return False
         except Exception as e:
             log_error(e, "Error checking AudioDeviceCmdlets")
             self._audio_cmdlets_checked = True
@@ -247,7 +283,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, f"Error executing action: {action_type}")
             return False
 
-    def play_pause(self):
+    def play_pause(self, **kwargs):
         """Toggle play/pause"""
         try:
             self._send_media_key(0xB3)
@@ -256,7 +292,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, "Error in play_pause")
             return False
 
-    def play(self):
+    def play(self, **kwargs):
         """Play"""
         try:
             if self.has_keyboard:
@@ -270,7 +306,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, "Error in play")
             return False
 
-    def pause(self):
+    def pause(self, **kwargs):
         """Pause"""
         try:
             if self.has_keyboard:
@@ -284,7 +320,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, "Error in pause")
             return False
 
-    def next_track(self):
+    def next_track(self, **kwargs):
         """Next track"""
         try:
             self._send_media_key(0xB0)
@@ -293,7 +329,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, "Error in next_track")
             return False
 
-    def previous_track(self):
+    def previous_track(self, **kwargs):
         """Previous track"""
         try:
             self._send_media_key(0xB1)
@@ -302,7 +338,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, "Error in previous_track")
             return False
 
-    def seek_forward(self, seconds=5):
+    def seek_forward(self, seconds=5, **kwargs):
         """Seek forward (not all media players support this)"""
         try:
             if self.has_keyboard:
@@ -315,7 +351,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, "Error in seek_forward")
             return False
 
-    def seek_backward(self, seconds=5):
+    def seek_backward(self, seconds=5, **kwargs):
         """Seek backward (not all media players support this)"""
         try:
             if self.has_keyboard:
@@ -328,7 +364,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, "Error in seek_backward")
             return False
 
-    def volume_up(self):
+    def volume_up(self, **kwargs):
         """Volume up"""
         try:
             self._send_media_key(0xAF)
@@ -337,7 +373,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, "Error in volume_up")
             return False
 
-    def volume_down(self):
+    def volume_down(self, **kwargs):
         """Volume down"""
         try:
             self._send_media_key(0xAE)
@@ -346,7 +382,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, "Error in volume_down")
             return False
 
-    def mute(self, target=None):
+    def mute(self, target=None, **kwargs):
         """Mute/unmute"""
         try:
             if target and self.audio_manager:
@@ -368,7 +404,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, "Error in mute")
             return False
 
-    def switch_audio_output(self, output_mode="cycle", device_name=None):
+    def switch_audio_output(self, output_mode="cycle", device_name=None, **kwargs):
         """Switch audio output device
 
         Args:
@@ -412,7 +448,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, "Error switching audio output")
             return False
 
-    def press_keybind(self, keys):
+    def press_keybind(self, keys, **kwargs):
         """Press a custom keybind"""
         try:
             if not self.has_keyboard:
@@ -439,7 +475,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, f"Error pressing keybind: {keys}")
             return False
 
-    def launch_app(self, app_path=None):
+    def launch_app(self, app_path=None, **kwargs):
         """Launch an application by path or name"""
         try:
             if not app_path:
