@@ -21,7 +21,7 @@ class VolumeControllerUI:
         self.root = root
         self.tray_icon = tray_icon  # Accept the pystray icon object
         self.running = True
-        
+
         # Initialize config manager early
         self.config_manager = ConfigManager()
 
@@ -35,18 +35,18 @@ class VolumeControllerUI:
             handle_error(e, "Failed to initialize application")
             raise
 
-        # Change the protocol for close button to self.hide_window
-        self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
-        # Bind the minimize event (iconify) to also hide the window
+        # Change the protocol for close button to terminate the app
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        # Bind the minimize event (iconify) to hide the window to tray
         self.root.bind("<Unmap>", self.on_minimize)
 
     def get_resource_path(self, relative_path):
         """
         Get absolute path to resource, works for dev and PyInstaller.
-        
+
         Args:
             relative_path: Path relative to src directory (e.g., 'icons/logo.png')
-        
+
         Returns:
             Absolute path to the resource
         """
@@ -58,7 +58,7 @@ class VolumeControllerUI:
             # Running in development mode
             # Get the src directory (parent of ui directory)
             base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
+
         return os.path.join(base_path, relative_path)
 
     def create_tray_image(self):
@@ -77,7 +77,7 @@ class VolumeControllerUI:
         self.root.title("DeskMixer")
         self.root.geometry("900x700")
         self.root.configure(bg="#1e1e1e")
-        
+
         # Load icon for the taskbar/window header
         try:
             # Use the resource path function
@@ -86,7 +86,7 @@ class VolumeControllerUI:
             self.root.iconphoto(True, self.icon_image)
         except Exception as e:
             log_error(e, "Could not load window icon.")
-            
+
         self.root.minsize(800, 600)
 
     def _initialize_managers(self):
@@ -122,7 +122,7 @@ class VolumeControllerUI:
                       background=[('selected', '#404040'), ('active', '#353535')],
                       foreground=[('selected', '#00ff00'), ('active', 'white')],
                       expand=[('selected', [1, 1, 1, 0])])
-            
+
             # Main frame to hold notebook
             main_frame = tk.Frame(self.root, bg="#1e1e1e")
             main_frame.pack(fill="both", expand=True, padx=10, pady=10)
@@ -184,7 +184,7 @@ class VolumeControllerUI:
         self.root.lift()
         self.root.attributes('-topmost', True)
         self.root.attributes('-topmost', False)  # Makes it not permanently topmost
-            
+
     def on_close(self):
         """Clean up and close the application, including the tray icon."""
         try:
@@ -195,12 +195,12 @@ class VolumeControllerUI:
                     "There are unsaved changes. Would you like to save them before closing?",
                     icon='warning'
                 )
-                
+
                 if response is None:  # Cancel
                     return
                 elif response:  # Yes
                     self.config_tab.save_config()
-            
+
             # Save all config changes one last time
             self.config_manager.save_config_if_changed()
 
@@ -208,11 +208,11 @@ class VolumeControllerUI:
             self.running = False
             if hasattr(self, 'audio_manager'):
                 self.audio_manager.cleanup()
-                
+
             # Stop the tray icon's thread gracefully
             if self.tray_icon:
                 self.tray_icon.stop()
-                
+
             # Use quit() for proper tkinter thread exit
             self.root.quit()
             self.root.destroy()

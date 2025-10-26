@@ -1,12 +1,13 @@
 from utils.error_handler import log_error
 import threading
 import time
+import atexit
 
 # Try importing heavy audio libs; allow app to run without them (degraded mode).
 AUDIO_AVAILABLE = True
 try:
     from ctypes import cast, POINTER
-    from comtypes import CLSCTX_ALL
+    from comtypes import CLSCTX_ALL, CoUninitialize
     from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume, ISimpleAudioVolume
 except Exception as _e:
     AUDIO_AVAILABLE = False
@@ -35,6 +36,8 @@ class AudioManager:
         if AUDIO_AVAILABLE:
             self._initialize()
             self._start_device_monitor()
+            # Register cleanup on exit
+            atexit.register(self.cleanup)
         else:
             # In degraded mode, keep attributes present but avoid calling heavy initialization.
             log_error(Exception("Audio libs missing"), "AudioManager initialized in degraded mode")
@@ -514,6 +517,8 @@ class AudioManager:
             target = binding.get('target')
             keybind = binding.get('keybind')
             app_path = binding.get('app_path')
+            output_mode = binding.get('output_mode')
+            output_device = binding.get('output_device')
 
             from utils.actions import ActionHandler
             action_handler = ActionHandler(self)
@@ -525,6 +530,10 @@ class AudioManager:
                 kwargs['keys'] = keybind
             if app_path:
                 kwargs['app_path'] = app_path
+            if output_mode:
+                kwargs['output_mode'] = output_mode
+            if output_device:
+                kwargs['device_name'] = output_device
 
             action_handler.execute_action(action, **kwargs)
 
@@ -536,17 +545,45 @@ class AudioManager:
         return self._get_focused_app_process()
 
     def cleanup(self):
-        """Cleanup audio resources"""
+        """Cleanup audio resources and COM objects"""
         try:
+            print("Cleaning up AudioManager...")
+
             # Stop device monitor
             self.monitor_running = False
-            if self.device_monitor_thread:
+            if self.device_monitor_thread and self.device_monitor_thread.is_alive():
                 self.device_monitor_thread.join(timeout=2.0)
 
-            self.app_sessions.clear()
+            # Clear all audio session references
+            if hasattr(self, 'app_sessions'):
+                self.app_sessions.clear()
+
+            # Clear system sounds session
             self.system_sounds_session = None
+
+            # Clear volume controls
+            self.master_volume = None
+            self.mic_volume = None
+
+            # Uninitialize COM if available
+            if AUDIO_AVAILABLE:
+                try:
+                    CoUninitialize()
+                except:
+                    pass
+
+            print("AudioManager cleanup complete")
+
         except Exception as e:
-            log_error(e, "Error during audio cleanup")
+            # Silent fail on cleanup to avoid error messages on exit
+            pass
+
+    def __del__(self):
+        """Destructor to ensure cleanup"""
+        try:
+            self.cleanup()
+        except:
+            pass
 
     def set_unbinded_volumes(self, level, mode='normal'):
         """Set volume for all unbinded applications with curve applied (excluding Master, Microphone, and currently focused app if Current Application binding exists)"""

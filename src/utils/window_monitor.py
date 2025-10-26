@@ -32,10 +32,30 @@ class WindowMonitor:
             import win32process
 
             hwnd = win32gui.GetForegroundWindow()
+
+            # Skip if no valid window handle
+            if not hwnd:
+                return None
+
             _, pid = win32process.GetWindowThreadProcessId(hwnd)
+
+            # Validate PID before using it
+            if pid <= 0 or pid > 2 ** 22:  # Max realistic PID on Windows
+                return None
+
+            # Check if process exists before creating Process object
+            if not psutil.pid_exists(pid):
+                return None
+
             process = psutil.Process(pid)
             return process.name()
 
+        except psutil.NoSuchProcess:
+            # Process terminated between checks
+            return None
+        except psutil.AccessDenied:
+            # No permission to access this process
+            return None
         except Exception as e:
             log_error(e, "Error getting focused window")
             return None

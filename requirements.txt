@@ -6,6 +6,7 @@ pystray>=0.19.0
 pycaw>=20230407
 comtypes>=1.2.0
 
+
 # Serial Communication
 pyserial>=3.5
 
@@ -17,6 +18,7 @@ keyboard>=0.13.5
 
 # System Monitoring
 psutil>=5.9.0
+
 
 # Build Tool (optional - for creating executable)
 pyinstaller>=6.0.0
