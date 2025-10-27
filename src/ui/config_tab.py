@@ -20,7 +20,7 @@ class ConfigTab:
         self.audio_manager = audio_manager
         self.frame = tk.Frame(parent, bg="#1e1e1e")
         self.config_manager = ConfigManager()
-        self.serial_handler = SerialHandler() # Still instantiate here
+        self.serial_handler = SerialHandler(config_manager=self.config_manager)
         self.unsaved_changes = False # Keep unsaved_changes for older checks
 
         # NEW: Initialize helpers
@@ -108,13 +108,6 @@ class ConfigTab:
         except Exception as e:
             handle_error(e, "Failed to create config tab UI")
 
-    # _create_serial_section removed: moved to ConfigSerialSection
-    # _create_bindings_section removed: moved to ConfigBindingsSection
-    # _create_button_section removed: moved to ConfigButtonSection
-    # _get_available_actions and helpers methods removed: moved to ConfigHelpers
-    # _auto_save_button_binding, _add_button_binding_row, _test_button_action, _delete_button_binding removed: moved to ConfigButtonSection
-    # _get_available_targets, _normalize_target_name, _get_display_name removed: moved to ConfigHelpers
-    # _add_binding_row removed: moved to ConfigBindingsSection
 
     def _refresh_all_app_lists(self):
         """Refresh all app dropdowns in the binding rows and button rows"""
@@ -155,10 +148,6 @@ class ConfigTab:
         except Exception as e:
             log_error(e, "Error refreshing all app lists")
 
-    # _show_mode_tooltip and _hide_tooltip removed: was not used in the original code, can be added back later if needed.
-    # _save_binding removed: replaced by auto-save logic in ConfigBindingsSection
-    # _toggle_serial removed: moved to ConfigSerialSection
-    # _refresh_ports removed: moved to ConfigSerialSection
 
 
     def _load_config(self):
@@ -173,16 +162,6 @@ class ConfigTab:
             # Load button bindings
             if self.button_section:
                 self.button_section.load_bindings(config)
-
-            # Load last connected port (delegated to serial section)
-            if self.serial_section:
-                # The serial section loads this in its __init__, 
-                # but we'll keep the variables updated for safety if needed.
-                last_port = config.get('last_connected_port')
-                last_baud = config.get('last_connected_baud', "9600")
-                if last_port:
-                    self.serial_section.com_port_var.set(last_port)
-                    self.serial_section.baud_var.set(last_baud)
 
         except Exception as e:
             log_error(e, "Error loading configuration")

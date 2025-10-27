@@ -11,7 +11,7 @@ class ConfigManager:
 
     def __init__(self, config_file="config.json"):
         self.config_file = config_file
-        
+
         # Get the directory where the executable is located
         if getattr(sys, 'frozen', False):
             # Running as compiled executable
@@ -22,10 +22,10 @@ class ConfigManager:
             # Go up one level if we're in a subdirectory
             if os.path.basename(app_dir) == 'config':
                 app_dir = os.path.dirname(app_dir)
-        
+
         self.config_dir = os.path.join(app_dir, "config")
         self.config_path = os.path.join(self.config_dir, self.config_file)
-        
+
         self.config = {}
         self.has_changes = False
 
@@ -54,11 +54,11 @@ class ConfigManager:
         try:
             # Ensure the config directory exists
             os.makedirs(self.config_dir, exist_ok=True)
-            
+
             # Save with proper formatting
             with open(self.config_path, 'w') as f:
                 json.dump(self.config, f, indent=4, sort_keys=True)
-                
+
             return True
         except Exception as e:
             log_error(e, f"Error saving configuration to {self.config_path}")
@@ -69,26 +69,26 @@ class ConfigManager:
         try:
             if not var_name or not var_name.startswith('s'):
                 return False
-                
+
             if 'variable_bindings' not in self.config:
                 self.config['variable_bindings'] = {}
-            
+
             # Normalize input to list
             if isinstance(app_names, str):
                 app_names = [app_names] if app_names else []
             elif not isinstance(app_names, list):
                 app_names = []
-            
+
             # Filter out empty values
             app_names = [app for app in app_names if app]
-            
+
             # Default to Master if empty
             if not app_names:
                 app_names = ['Master']
-            
+
             # Check if binding actually changed
             current = self.config['variable_bindings'].get(var_name)
-            
+
             # Normalize current for comparison
             if isinstance(current, dict):
                 current_apps = current.get('app_name', [])
@@ -100,15 +100,15 @@ class ConfigManager:
                 current_apps = [current]
             else:
                 current_apps = []
-            
+
             if set(current_apps) != set(app_names):
                 self.config['variable_bindings'][var_name] = app_names
                 self.has_changes = True
                 self.save_config()
                 return True
-                
+
             return False
-                    
+
         except Exception as e:
             log_error(e, f"Error adding binding for {var_name}")
             return False
@@ -130,19 +130,19 @@ class ConfigManager:
         try:
             if not button_name or not button_name.startswith('b'):
                 return False
-                
+
             if 'button_bindings' not in self.config:
                 self.config['button_bindings'] = {}
-            
+
             current = self.config['button_bindings'].get(button_name, {})
             if current != binding_data:
                 self.config['button_bindings'][button_name] = binding_data
                 self.has_changes = True
                 self.save_config()
                 return True
-                
+
             return False
-                    
+
         except Exception as e:
             log_error(e, f"Error adding button binding for {button_name}")
             return False
@@ -155,8 +155,8 @@ class ConfigManager:
 
     def set_last_connected_port(self, port, baud):
         """Set the last connected serial port"""
-        if (self.config.get('last_connected_port') != port or 
-            self.config.get('last_connected_baud') != str(baud)):
+        if (self.config.get('last_connected_port') != port or
+                self.config.get('last_connected_baud') != str(baud)):
             self.config['last_connected_port'] = port
             self.config['last_connected_baud'] = str(baud)
             self.has_changes = True
@@ -165,10 +165,10 @@ class ConfigManager:
         """Set the global volume control mode for all bindings"""
         valid_modes = ['soft', 'normal', 'hard']
         mode = mode.lower() if mode else 'normal'
-        
+
         if mode not in valid_modes:
             mode = 'normal'
-            
+
         if self.config.get('slider_sampling') != mode:
             self.config['slider_sampling'] = mode
             self.has_changes = True
@@ -183,7 +183,7 @@ class ConfigManager:
     def set_start_in_tray(self, value):
         """Set the value for the start_in_tray config key."""
         key = 'start_in_tray'
-        new_value = bool(value) 
+        new_value = bool(value)
         if self.config.get(key) != new_value:
             self.config[key] = new_value
             self.has_changes = True
@@ -209,10 +209,10 @@ class ConfigManager:
         try:
             if not self.config:
                 self.load_config()
-                
+
             bindings = self.config.get('variable_bindings', {})
             binding = bindings.get(var_name)
-            
+
             if binding:
                 # Handle multiple formats: string, list, or dict
                 if isinstance(binding, dict):
@@ -225,7 +225,7 @@ class ConfigManager:
                 else:
                     return [binding] if binding else []
             return None
-            
+
         except Exception as e:
             log_error(e, "Error loading variable binding")
             return None

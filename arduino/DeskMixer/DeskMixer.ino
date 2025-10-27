@@ -1,5 +1,3 @@
-
-
 // --- CONSTANTS ---
 const int NUM_SLIDERS = 4;
 const int analogInputs[NUM_SLIDERS] = {33, 32, 35, 34};
@@ -9,6 +7,10 @@ const int buttonInputs[NUM_BUTTONS] = {27, 25, 14, 26, 12, 13};
 
 // Define the interval (in milliseconds) for sending slider data
 const long SEND_INTERVAL_MS = 10; 
+
+// Handshake constants
+const String HANDSHAKE_REQUEST = "PING";
+const String HANDSHAKE_RESPONSE = "DeskMixer Controller Ready";
 
 // --- GLOBAL VARIABLES ---
 
@@ -23,6 +25,9 @@ int previousButtonValues[NUM_BUTTONS] = {0};
 
 // Variable to store the last time slider data was sent
 unsigned long lastSendTime = 0;
+
+// Buffer for incoming serial data
+String inputBuffer = "";
 
 
 // --- SETUP ---
@@ -43,22 +48,30 @@ void setup() {
     
   // Initialize serial communication
   Serial.begin(9600);
-  Serial.println("Deej Controller Ready");
+  
+  // Wait for serial port to be ready
+  delay(1000);
+  
+  // Send handshake response immediately on startup
+  Serial.println(HANDSHAKE_RESPONSE);
 }
 
 
 // --- MAIN LOOP ---
 
 void loop() {
+  // 0. Check for incoming serial commands (handshake requests)
+  checkSerialInput();
+  
   // 1. Read all physical inputs
   // NOTE: This runs on every iteration of loop(), making buttons highly responsive.
   readCurrentValues();
 
-  // 3. Check for and send one-shot button press events (separate lines, only sent on press)
+  // 2. Check for and send one-shot button press events (separate lines, only sent on press)
   // NOTE: This runs on every iteration of loop() and bypasses the 10ms timing check.
   checkAndSendButtonEvents();
   
-  // 2. Non-blocking check to send continuous slider data
+  // 3. Non-blocking check to send continuous slider data
   unsigned long currentMillis = millis();
   
   // Send the slider values only if the interval has passed
@@ -69,6 +82,40 @@ void loop() {
   
   // The loop is now non-blocking and will cycle as fast as possible,
   // making button detection immediate.
+}
+
+
+// --- SERIAL INPUT HANDLER ---
+
+// Check for incoming serial commands (like handshake requests)
+void checkSerialInput() {
+  while (Serial.available() > 0) {
+    char inChar = (char)Serial.read();
+    
+    if (inChar == '\n' || inChar == '\r') {
+      // Process complete command
+      if (inputBuffer.length() > 0) {
+        processSerialCommand(inputBuffer);
+        inputBuffer = "";
+      }
+    } else {
+      // Add character to buffer
+      inputBuffer += inChar;
+    }
+  }
+}
+
+
+// Process received serial commands
+void processSerialCommand(String command) {
+  command.trim();
+  
+  // Handle handshake request
+  if (command == HANDSHAKE_REQUEST) {
+    Serial.println(HANDSHAKE_RESPONSE);
+  }
+  
+  // Future commands can be added here (e.g., LED control, configuration, etc.)
 }
 
 
