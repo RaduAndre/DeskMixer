@@ -4,6 +4,8 @@ from PIL import Image
 import threading
 import os
 import sys
+import socket
+import pystray
 
 from ui.volume_tab import VolumeTab
 from ui.config_tab import ConfigTab
@@ -13,14 +15,19 @@ from utils.error_handler import handle_error, log_error
 from utils.window_monitor import WindowMonitor
 from config.config_manager import ConfigManager
 
+# IPC Constants
+IPC_PORT = 48612  # Port for inter-process communication
+IPC_MESSAGE = b"SHOW_WINDOW"
+
 
 class VolumeControllerUI:
     """Main application window with tabbed interface"""
 
-    def __init__(self, root, tray_icon=None):
+    def __init__(self, root):
         self.root = root
-        self.tray_icon = tray_icon  # Accept the pystray icon object
+        self.tray_icon = None
         self.running = True
+        self.ipc_server = None
 
         # Initialize config manager early
         self.config_manager = ConfigManager()
@@ -30,6 +37,8 @@ class VolumeControllerUI:
             self._initialize_managers()
             self._create_ui()
             self._start_monitoring()
+            self._setup_tray_icon()
+            self._start_ipc_listener()
 
         except Exception as e:
             handle_error(e, "Failed to initialize application")
@@ -52,11 +61,9 @@ class VolumeControllerUI:
         """
         if getattr(sys, 'frozen', False):
             # Running as compiled executable
-            # PyInstaller creates a temp folder and stores path in _MEIPASS
             base_path = sys._MEIPASS
         else:
             # Running in development mode
-            # Get the src directory (parent of ui directory)
             base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         return os.path.join(base_path, relative_path)
@@ -64,12 +71,10 @@ class VolumeControllerUI:
     def create_tray_image(self):
         """Create a PIL image object for the tray icon."""
         try:
-            # Load the icon using the resource path function
             icon_path = self.get_resource_path('icons/logo.png')
             return Image.open(icon_path)
         except Exception as e:
             log_error(e, "Could not load tray icon. Using default icon.")
-            # Create a simple, fallback image if the file is not found
             return Image.new('RGB', (64, 64), color='darkgrey')
 
     def _initialize_window(self):
@@ -80,7 +85,6 @@ class VolumeControllerUI:
 
         # Load icon for the taskbar/window header
         try:
-            # Use the resource path function
             icon_path = self.get_resource_path('icons/logo.png')
             self.icon_image = tk.PhotoImage(file=icon_path)
             self.root.iconphoto(True, self.icon_image)
@@ -144,6 +148,79 @@ class VolumeControllerUI:
             handle_error(e, "Failed to create UI")
             raise
 
+    def _setup_tray_icon(self):
+        """Setup and start the system tray icon"""
+        try:
+            icon_image = self.create_tray_image()
+            menu = (
+                pystray.MenuItem('Show Window', self._on_show_window, default=True),
+                pystray.MenuItem('Quit', self._on_quit)
+            )
+            self.tray_icon = pystray.Icon("DeskMixer", icon_image, "DeskMixer", menu)
+
+            # Set the action for double-click on the tray icon
+            self.tray_icon.activate = self._on_show_window
+
+            # Start the tray icon on a separate thread
+            tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
+            tray_thread.start()
+        except Exception as e:
+            log_error(e, "Failed to setup tray icon")
+
+    def _on_show_window(self, icon=None, item=None):
+        """Handles the Show Window menu item and double-click."""
+        self.root.after(0, self.show_window)
+
+    def _on_quit(self, icon=None, item=None):
+        """Handles the Quit menu item."""
+        self.root.after(0, self.on_close)
+
+    def _start_ipc_listener(self):
+        """Start a listener socket to receive show window commands from new instances."""
+
+        def listen():
+            try:
+                self.ipc_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.ipc_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                self.ipc_server.bind(('127.0.0.1', IPC_PORT))
+                self.ipc_server.listen(1)
+                self.ipc_server.settimeout(1.0)  # Check periodically if app is still running
+
+                while self.running:
+                    try:
+                        conn, _ = self.ipc_server.accept()
+                        data = conn.recv(1024)
+                        if data == IPC_MESSAGE:
+                            # Show the window on the main thread
+                            self.root.after(0, self.show_window)
+                        conn.close()
+                    except socket.timeout:
+                        continue
+                    except Exception as e:
+                        if self.running:  # Only log if we're still supposed to be running
+                            log_error(e, "Error in IPC listener")
+
+                self.ipc_server.close()
+            except Exception as e:
+                log_error(e, "Could not start IPC listener")
+
+        thread = threading.Thread(target=listen, daemon=True)
+        thread.start()
+
+    @staticmethod
+    def notify_existing_instance():
+        """Send a message to the existing instance to show itself."""
+        try:
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client.settimeout(2.0)
+            client.connect(('127.0.0.1', IPC_PORT))
+            client.send(IPC_MESSAGE)
+            client.close()
+            return True
+        except Exception as e:
+            log_error(e, "Could not notify existing instance via IPC")
+            return False
+
     def _start_monitoring(self):
         """Start background monitoring threads"""
         try:
@@ -170,20 +247,19 @@ class VolumeControllerUI:
 
     def on_minimize(self, event):
         """Handle window minimization event to hide the window."""
-        # Check if the window is being minimized
         if str(self.root.state()) == 'iconic':
             self.hide_window()
 
     def hide_window(self):
         """Hides the main window and shows the tray icon."""
-        self.root.withdraw()  # Hides the window
+        self.root.withdraw()
 
     def show_window(self):
         """Shows the main window and brings it to the front."""
-        self.root.deiconify()  # Shows the window
+        self.root.deiconify()
         self.root.lift()
         self.root.attributes('-topmost', True)
-        self.root.attributes('-topmost', False)  # Makes it not permanently topmost
+        self.root.attributes('-topmost', False)
 
     def on_close(self):
         """Clean up and close the application, including the tray icon."""
@@ -206,8 +282,16 @@ class VolumeControllerUI:
 
             # Cleanup and close
             self.running = False
+
             if hasattr(self, 'audio_manager'):
                 self.audio_manager.cleanup()
+
+            # Close IPC server
+            if self.ipc_server:
+                try:
+                    self.ipc_server.close()
+                except:
+                    pass
 
             # Stop the tray icon's thread gracefully
             if self.tray_icon:

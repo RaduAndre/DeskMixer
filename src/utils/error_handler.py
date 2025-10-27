@@ -64,6 +64,7 @@ def log_error(exception, context="", full_trace=""):
         # Use 'a' for append mode, 'utf-8' encoding for safety
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(log_message)
+            print(log_message)
     except Exception as e:
         # If logging fails (e.g., permissions), print a note to the console but continue
         print(f"Failed to write to log file at {log_path}: {e}")
