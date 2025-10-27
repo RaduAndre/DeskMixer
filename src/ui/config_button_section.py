@@ -457,7 +457,7 @@ class ConfigButtonSection:
                 elif action_name == "switch_audio_output":
                     output_label.pack(side="left", padx=2)
                     output_mode_combo.pack(side="left", padx=2)
-                    refresh_btn.pack(side="left", padx=2)
+
 
             # BIND AUTO-SAVE TO ACTION COMBO AND CALL on_action_change
             action_combo.bind('<<ComboboxSelected>>',
