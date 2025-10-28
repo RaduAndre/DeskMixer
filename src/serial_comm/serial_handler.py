@@ -129,6 +129,12 @@ class SerialHandler:
             if self._perform_handshake():
                 print(f"✓ Connected successfully to {port}")
                 self._notify_status("connected", f"Connected to {port}")
+
+                # ✅ ADD THIS: Save successful connection to config
+                if self.config_manager:
+                    self.config_manager.set_last_connected_port(port, baud_rate)
+                    self.config_manager.save_config()
+
                 return True
             else:
                 print(f"✗ Handshake failed on {port} - not a compatible device")
@@ -148,7 +154,7 @@ class SerialHandler:
                 port = f'\\\\.\\{port}'
 
             self.port = port
-            self.baud_rate = baud_rate
+            self.baud_rate = baud_rate  # ✅ Ensure baud rate is set
 
             # Open serial port using Windows API with overlapped I/O
             self.serial_handle = win32file.CreateFile(

@@ -45,13 +45,13 @@ void setup() {
 
   // Set ADC resolution for consistent reading (0-1023 range for 10-bit)
   analogReadResolution(10);
-    
+
   // Initialize serial communication
   Serial.begin(9600);
-  
+
   // Wait for serial port to be ready
   delay(1000);
-  
+
   // Send handshake response immediately on startup
   Serial.println(HANDSHAKE_RESPONSE);
 }
@@ -62,7 +62,7 @@ void setup() {
 void loop() {
   // 0. Check for incoming serial commands (handshake requests)
   checkSerialInput();
-  
+
   // 1. Read all physical inputs
   // NOTE: This runs on every iteration of loop(), making buttons highly responsive.
   readCurrentValues();
@@ -70,16 +70,16 @@ void loop() {
   // 2. Check for and send one-shot button press events (separate lines, only sent on press)
   // NOTE: This runs on every iteration of loop() and bypasses the 10ms timing check.
   checkAndSendButtonEvents();
-  
+
   // 3. Non-blocking check to send continuous slider data
   unsigned long currentMillis = millis();
-  
+
   // Send the slider values only if the interval has passed
   if (currentMillis - lastSendTime >= SEND_INTERVAL_MS) {
     lastSendTime = currentMillis; // Save the last time the data was sent
     sendContinuousSliderValues();
   }
-  
+
   // The loop is now non-blocking and will cycle as fast as possible,
   // making button detection immediate.
 }
@@ -91,7 +91,7 @@ void loop() {
 void checkSerialInput() {
   while (Serial.available() > 0) {
     char inChar = (char)Serial.read();
-    
+
     if (inChar == '\n' || inChar == '\r') {
       // Process complete command
       if (inputBuffer.length() > 0) {
@@ -109,12 +109,12 @@ void checkSerialInput() {
 // Process received serial commands
 void processSerialCommand(String command) {
   command.trim();
-  
+
   // Handle handshake request
   if (command == HANDSHAKE_REQUEST) {
     Serial.println(HANDSHAKE_RESPONSE);
   }
-  
+
   // Future commands can be added here (e.g., LED control, configuration, etc.)
 }
 
