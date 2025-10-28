@@ -1,6 +1,7 @@
-# ui/config_serial_section.py
 import tkinter as tk
 from tkinter import ttk
+import os
+import subprocess
 
 from utils.error_handler import log_error
 from utils.system_startup import set_startup, check_startup_status
@@ -103,12 +104,44 @@ class ConfigSerialSection:
                 selectcolor="#2d2d2d",
                 command=self._handle_startup_setting_change
             )
-            startup_check.pack(side="left", padx=(0, 10))
+            startup_check.pack(side="left", padx=(0, 15))
+
+            # Button to open config folder
+            open_folder_btn = tk.Button(
+                settings_frame,
+                text="Open Config Folder",
+                command=self._open_config_folder,
+                bg="#3d3d3d",
+                fg="white",
+                relief="flat",
+                cursor="hand2",
+                font=("Arial", 8)
+            )
+            open_folder_btn.pack(side="left", padx=(0, 10))
 
             self.frame = serial_frame
 
         except Exception as e:
             log_error(e, "Error creating serial section")
+
+    def _open_config_folder(self):
+        """Open the configuration folder in file explorer"""
+        try:
+            # Get the config folder path from config_manager
+            config_folder = self.config_manager.config_dir
+
+            if os.path.exists(config_folder):
+                # Open the folder in file explorer
+                if os.name == 'nt':  # Windows
+                    os.startfile(config_folder)
+                elif os.name == 'posix':  # macOS or Linux
+                    subprocess.run(['open', config_folder] if sys.platform == 'darwin' else ['xdg-open', config_folder])
+                else:
+                    log_error(Exception("Unsupported OS"), "Cannot open folder")
+            else:
+                log_error(Exception("Folder does not exist"), f"Config folder not found: {config_folder}")
+        except Exception as e:
+            log_error(e, "Error opening config folder")
 
     def _on_status_change(self, status, message):
         """Called when connection status changes"""
