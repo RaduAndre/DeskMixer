@@ -9,7 +9,7 @@ const int buttonInputs[NUM_BUTTONS] = {27, 25, 14, 26, 12, 13};
 const long SEND_INTERVAL_MS = 10; 
 
 // Handshake constants
-const String HANDSHAKE_REQUEST = "PING";
+const String HANDSHAKE_REQUEST = "DeskMixer controller request";
 const String HANDSHAKE_RESPONSE = "DeskMixer Controller Ready";
 
 // --- GLOBAL VARIABLES ---

@@ -5,6 +5,14 @@ from datetime import datetime
 import os
 
 
+def get_app_data_folder():
+    """Get the application data folder in user's Documents"""
+    documents_path = os.path.join(os.path.expanduser('~'), 'Documents')
+    app_folder = os.path.join(documents_path, 'DeskMixer')
+    os.makedirs(app_folder, exist_ok=True)
+    return app_folder
+
+
 def setup_error_handling():
     """Setup global error handling"""
     sys.excepthook = global_exception_handler
@@ -18,7 +26,7 @@ def global_exception_handler(exc_type, exc_value, exc_traceback):
         return
 
     error_msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-    
+
     # We call log_error with the full_trace for uncaught exceptions
     log_error(exc_value, "Uncaught exception", error_msg)
 
@@ -37,8 +45,8 @@ def handle_error(exception, context="Error occurred"):
 
 def log_error(exception, context="", full_trace=""):
     """
-    Log error to file and console. 
-    The log file is created in the current working directory of the application.
+    Log error to file and console.
+    The log file is created in the DeskMixer folder in user's Documents.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -56,9 +64,10 @@ def log_error(exception, context="", full_trace=""):
     print(log_message)
 
     # --- LOG PATH MODIFICATION ---
-    # Construct the path relative to the current working directory (where the EXE/main.py is)
-    log_path = os.path.join(os.getcwd(), "error.log")
-    
+    # Construct the path in user's Documents/DeskMixer folder
+    app_folder = get_app_data_folder()
+    log_path = os.path.join(app_folder, "error.log")
+
     # Write to log file
     try:
         # Use 'a' for append mode, 'utf-8' encoding for safety

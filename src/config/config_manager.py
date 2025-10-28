@@ -1,9 +1,15 @@
-# config_manager.py
-
 import json
 import os
 import sys
 from utils.error_handler import log_error
+
+
+def get_app_data_folder():
+    """Get the application data folder in user's Documents"""
+    documents_path = os.path.join(os.path.expanduser('~'), 'Documents')
+    app_folder = os.path.join(documents_path, 'DeskMixer')
+    os.makedirs(app_folder, exist_ok=True)
+    return app_folder
 
 
 class ConfigManager:
@@ -12,18 +18,8 @@ class ConfigManager:
     def __init__(self, config_file="config.json"):
         self.config_file = config_file
 
-        # Get the directory where the executable is located
-        if getattr(sys, 'frozen', False):
-            # Running as compiled executable
-            app_dir = os.path.dirname(sys.executable)
-        else:
-            # Running as script
-            app_dir = os.path.dirname(os.path.abspath(__file__))
-            # Go up one level if we're in a subdirectory
-            if os.path.basename(app_dir) == 'config':
-                app_dir = os.path.dirname(app_dir)
-
-        self.config_dir = os.path.join(app_dir, "config")
+        # Use Documents/DeskMixer folder for configuration
+        self.config_dir = get_app_data_folder()
         self.config_path = os.path.join(self.config_dir, self.config_file)
 
         self.config = {}

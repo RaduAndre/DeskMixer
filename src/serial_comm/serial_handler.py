@@ -34,7 +34,7 @@ class SerialHandler:
         self.attempting_reconnect = False
         self.stop_reconnect = False
         self.handshake_timeout = 3  # seconds
-        self.handshake_request = "PING"
+        self.handshake_request = "DeskMixer controller request"
         self.handshake_response = "DeskMixer Controller Ready"
         self.handshake_received = False
         self.monitoring_active = False
