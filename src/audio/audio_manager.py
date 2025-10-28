@@ -33,6 +33,9 @@ class AudioManager:
         self.device_monitor_thread = None
         self.monitor_running = False
 
+        # Track COM initialization state
+        self._com_initialized = False
+
         if AUDIO_AVAILABLE:
             self._initialize()
             self._start_device_monitor()
@@ -42,9 +45,53 @@ class AudioManager:
             # In degraded mode, keep attributes present but avoid calling heavy initialization.
             log_error(Exception("Audio libs missing"), "AudioManager initialized in degraded mode")
 
-    def _initialize(self):
-        """Initialize audio devices"""
+    def _safe_com_operation(self, operation, operation_name="COM operation", default_return=None,
+                            retry_on_failure=True):
+        """
+        Safely execute a COM operation with comprehensive error handling
+
+        Args:
+            operation: Callable that performs the COM operation
+            operation_name: Name of the operation for error reporting
+            default_return: Value to return if operation fails
+            retry_on_failure: Whether to attempt recovery and retry once
+
+        Returns:
+            Result of operation or default_return if failed
+        """
         try:
+            return operation()
+        except Exception as e:
+            error_msg = f"COM error in {operation_name}: {str(e)}"
+
+            # Check for specific COM errors that indicate device disconnection or access issues
+            com_errors_to_handle = [
+                "access denied", "invalid pointer", "device not available",
+                "no audio endpoint", "interface not found", "disconnected",
+                "rpc server unavailable", "server execution failed"
+            ]
+
+            is_com_error = any(error in str(e).lower() for error in com_errors_to_handle)
+
+            if is_com_error and retry_on_failure:
+                log_error(e, f"{operation_name} failed with COM error, attempting recovery...")
+                try:
+                    # Attempt to refresh audio devices and retry
+                    if self.refresh_audio_devices():
+                        time.sleep(0.1)  # Brief pause after refresh
+                        return operation()
+                    else:
+                        log_error(e, f"Recovery failed for {operation_name}")
+                except Exception as recovery_error:
+                    log_error(recovery_error, f"Recovery attempt failed for {operation_name}")
+
+            log_error(e, error_msg)
+            return default_return
+
+    def _initialize(self):
+        """Initialize audio devices with error handling"""
+
+        def init_operation():
             # Master volume
             devices = AudioUtilities.GetSpeakers()
             interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
@@ -53,7 +100,8 @@ class AudioManager:
             # Store current device ID for change detection
             try:
                 self.current_device_id = devices.GetId()
-            except:
+            except Exception as e:
+                log_error(e, "Could not get device ID")
                 self.current_device_id = None
 
             # Microphone
@@ -65,9 +113,18 @@ class AudioManager:
                 log_error(e, "Microphone not available")
                 self.mic_volume = None
 
-        except Exception as e:
-            log_error(e, "Failed to initialize audio devices")
-            raise
+            self._com_initialized = True
+            return True
+
+        success = self._safe_com_operation(
+            init_operation,
+            "audio device initialization",
+            default_return=False
+        )
+
+        if not success:
+            log_error(Exception("Initialization failed"), "Failed to initialize audio devices")
+            raise RuntimeError("Audio device initialization failed")
 
     def _start_device_monitor(self):
         """Start background thread to monitor for device changes"""
@@ -84,9 +141,17 @@ class AudioManager:
             try:
                 time.sleep(1.0)  # Check every second
 
-                # Get current default device
-                devices = AudioUtilities.GetSpeakers()
-                new_device_id = devices.GetId()
+                def check_device_operation():
+                    # Get current default device
+                    devices = AudioUtilities.GetSpeakers()
+                    new_device_id = devices.GetId()
+                    return new_device_id
+
+                new_device_id = self._safe_com_operation(
+                    check_device_operation,
+                    "device change detection",
+                    default_return=self.current_device_id
+                )
 
                 # If device changed, refresh everything
                 if self.current_device_id and new_device_id != self.current_device_id:
@@ -115,37 +180,48 @@ class AudioManager:
 
             print("Refreshing audio devices...")
 
-            # Re-initialize master volume with new device
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-            self.master_volume = cast(interface, POINTER(IAudioEndpointVolume))
+            def refresh_operation():
+                # Re-initialize master volume with new device
+                devices = AudioUtilities.GetSpeakers()
+                interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                self.master_volume = cast(interface, POINTER(IAudioEndpointVolume))
 
-            # Update device ID
-            try:
-                self.current_device_id = devices.GetId()
-            except:
-                pass
+                # Update device ID
+                try:
+                    self.current_device_id = devices.GetId()
+                except Exception as e:
+                    log_error(e, "Could not get device ID during refresh")
+                    self.current_device_id = None
 
-            # Re-initialize microphone
-            try:
-                mic_devices = AudioUtilities.GetMicrophone()
-                mic_interface = mic_devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-                self.mic_volume = cast(mic_interface, POINTER(IAudioEndpointVolume))
-            except Exception as e:
-                log_error(e, "Microphone not available during refresh")
-                self.mic_volume = None
+                # Re-initialize microphone
+                try:
+                    mic_devices = AudioUtilities.GetMicrophone()
+                    mic_interface = mic_devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                    self.mic_volume = cast(mic_interface, POINTER(IAudioEndpointVolume))
+                except Exception as e:
+                    log_error(e, "Microphone not available during refresh")
+                    self.mic_volume = None
 
-            # Clear old sessions - CRITICAL: Old sessions point to old device!
-            self.app_sessions.clear()
+                # Clear old sessions - CRITICAL: Old sessions point to old device!
+                self.app_sessions.clear()
 
-            # Refresh all audio sessions with NEW device
-            self.get_all_audio_apps()
+                # Refresh all audio sessions with NEW device
+                self.get_all_audio_apps()
 
-            # Refresh system sounds session
-            self._refresh_system_sounds_session()
+                # Refresh system sounds session
+                self._refresh_system_sounds_session()
 
-            print("Audio devices refreshed successfully!")
-            return True
+                print("Audio devices refreshed successfully!")
+                return True
+
+            success = self._safe_com_operation(
+                refresh_operation,
+                "audio device refresh",
+                default_return=False,
+                retry_on_failure=False  # Don't retry refresh within refresh
+            )
+
+            return success
 
         except Exception as e:
             log_error(e, "Error refreshing audio devices")
@@ -157,20 +233,28 @@ class AudioManager:
             if not AUDIO_AVAILABLE:
                 return False
 
-            sessions = AudioUtilities.GetAllSessions()
+            def refresh_system_sounds_operation():
+                sessions = AudioUtilities.GetAllSessions()
 
-            for session in sessions:
-                try:
-                    # System sounds don't have a process, check DisplayName instead
-                    if session.Process is None or session.Process.name() is None:
-                        volume_interface = session._ctl.QueryInterface(ISimpleAudioVolume)
-                        # This is likely the system sounds session
-                        self.system_sounds_session = volume_interface
-                        return True
-                except:
-                    continue
+                for session in sessions:
+                    try:
+                        # System sounds don't have a process, check DisplayName instead
+                        if session.Process is None or session.Process.name() is None:
+                            volume_interface = session._ctl.QueryInterface(ISimpleAudioVolume)
+                            # This is likely the system sounds session
+                            self.system_sounds_session = volume_interface
+                            return True
+                    except Exception as e:
+                        log_error(e, "Error checking system sounds session")
+                        continue
 
-            return False
+                return False
+
+            return self._safe_com_operation(
+                refresh_system_sounds_operation,
+                "system sounds session refresh",
+                default_return=False
+            )
 
         except Exception as e:
             log_error(e, "Error refreshing system sounds session")
@@ -194,15 +278,23 @@ class AudioManager:
                 sessions = self.app_sessions[app_name]
 
                 for session in sessions:
-                    try:
-                        session.SetMasterVolume(adjusted_level, None)
+                    def set_volume_operation(session_obj=session):
+                        session_obj.SetMasterVolume(adjusted_level, None)
+                        return True
+
+                    success = self._safe_com_operation(
+                        lambda: set_volume_operation(),
+                        f"set volume for {app_name}",
+                        default_return=False
+                    )
+
+                    if success:
                         success_count += 1
-                    except Exception as e:
-                        log_error(e, f"Error setting volume for one instance of {app_name}")
+                    else:
+                        log_error(Exception("Set volume failed"),
+                                  f"Error setting volume for one instance of {app_name}")
                         # Session might be stale, trigger refresh
-                        if "invalid" in str(e).lower() or "access" in str(e).lower():
-                            self.get_all_audio_apps()
-                        continue
+                        self.get_all_audio_apps()
 
                 return success_count > 0
 
@@ -222,27 +314,48 @@ class AudioManager:
 
                 # Get mute state from first instance
                 if len(sessions) > 0:
+                    def get_mute_operation():
+                        return sessions[0].GetMute()
+
                     try:
-                        current_mute = sessions[0].GetMute()
-                    except:
+                        current_mute = self._safe_com_operation(
+                            get_mute_operation,
+                            f"get mute state for {app_name}",
+                            default_return=False
+                        )
+                    except Exception:
                         # Session might be stale, refresh
                         self.get_all_audio_apps()
                         if app_name not in self.app_sessions or len(self.app_sessions[app_name]) == 0:
                             return False
                         sessions = self.app_sessions[app_name]
-                        current_mute = sessions[0].GetMute()
+
+                        current_mute = self._safe_com_operation(
+                            get_mute_operation,
+                            f"get mute state for {app_name} after refresh",
+                            default_return=False
+                        )
 
                     new_mute = not current_mute
 
                     # Apply to all instances
                     success_count = 0
                     for session in sessions:
-                        try:
-                            session.SetMute(new_mute, None)
+                        def set_mute_operation(session_obj=session):
+                            session_obj.SetMute(new_mute, None)
+                            return True
+
+                        success = self._safe_com_operation(
+                            lambda: set_mute_operation(),
+                            f"set mute for {app_name}",
+                            default_return=False
+                        )
+
+                        if success:
                             success_count += 1
-                        except Exception as e:
-                            log_error(e, f"Error toggling mute for one instance of {app_name}")
-                            continue
+                        else:
+                            log_error(Exception("Set mute failed"),
+                                      f"Error toggling mute for one instance of {app_name}")
 
                     return success_count > 0
 
@@ -323,7 +436,7 @@ class AudioManager:
                 # Get window title for debugging
                 window_title = win32gui.GetWindowText(hwnd)
             except Exception as e:
-                log_error(e, "Could not get window title: {e}")
+                log_error(e, f"Could not get window title: {e}")
 
             try:
                 # Get the process ID from the window handle
@@ -385,8 +498,8 @@ class AudioManager:
         # Try case-insensitive match with .exe variants
         for session_name in self.app_sessions.keys():
             session_lower = session_name.lower()
-            if (session_lower == process_lower + '.exe' or
-                session_lower + '.exe' == process_lower) and len(self.app_sessions[session_name]) > 0:
+            if (session_lower == process_lower + '.exe' or session_lower + '.exe' == process_lower) and len(
+                    self.app_sessions[session_name]) > 0:
                 return session_name
 
         return None
@@ -478,7 +591,6 @@ class AudioManager:
                                             success = self.set_app_volume(matched_session, value, slider_sampling)
 
                                             if success:
-
                                                 # Update volume tab if available
                                                 if hasattr(self, 'volume_tab') and self.volume_tab:
                                                     try:
@@ -566,24 +678,25 @@ class AudioManager:
             self.mic_volume = None
 
             # Uninitialize COM if available
-            if AUDIO_AVAILABLE:
+            if AUDIO_AVAILABLE and self._com_initialized:
                 try:
                     CoUninitialize()
-                except:
-                    pass
+                    self._com_initialized = False
+                except Exception as e:
+                    log_error(e, "Error during COM uninitialization")
 
             print("AudioManager cleanup complete")
 
         except Exception as e:
             # Silent fail on cleanup to avoid error messages on exit
-            pass
+            log_error(e, "Error during AudioManager cleanup")
 
     def __del__(self):
         """Destructor to ensure cleanup"""
         try:
             self.cleanup()
-        except:
-            pass
+        except Exception as e:
+            log_error(e, "Error in AudioManager destructor")
 
     def set_unbinded_volumes(self, level, mode='normal'):
         """Set volume for all unbinded applications with curve applied (excluding Master, Microphone, and currently focused app if Current Application binding exists)"""
@@ -648,7 +761,15 @@ class AudioManager:
                     try:
                         # Verify session still exists before trying to set volume
                         if app_name in self.app_sessions:
-                            session.SetMasterVolume(adjusted_level, None)
+                            def set_volume_operation(session_obj=session):
+                                session_obj.SetMasterVolume(adjusted_level, None)
+                                return True
+
+                            self._safe_com_operation(
+                                lambda: set_volume_operation(),
+                                f"set unbinded volume for {app_name}",
+                                default_return=False
+                            )
                     except Exception as e:
                         log_error(e, f"Error setting volume for {app_name}")
 
@@ -663,36 +784,43 @@ class AudioManager:
 
             adjusted_level = self._apply_volume_curve(level, mode)
 
-            # Try to use cached session first
-            if self.system_sounds_session:
-                try:
-                    self.system_sounds_session.SetMasterVolume(adjusted_level, None)
-                    return True
-                except:
-                    # Session may have become invalid, refresh
-                    self.system_sounds_session = None
-
-            # Refresh and try again
-            if self._refresh_system_sounds_session():
-                try:
-                    self.system_sounds_session.SetMasterVolume(adjusted_level, None)
-                    return True
-                except Exception as e:
-                    log_error(e, "Error setting system sounds volume after refresh")
-
-            # Alternative: Try to find in app_sessions (some systems show it there)
-            self.get_all_audio_apps()
-            for app_name in ["AudioSrv.Dll", "System Sounds", "svchost.exe"]:
-                if app_name in self.app_sessions:
+            def set_system_volume_operation():
+                # Try to use cached session first
+                if self.system_sounds_session:
                     try:
-                        # Apply to all instances
-                        for session in self.app_sessions[app_name]:
-                            session.SetMasterVolume(adjusted_level, None)
+                        self.system_sounds_session.SetMasterVolume(adjusted_level, None)
+                        return True
+                    except:
+                        # Session may have become invalid, refresh
+                        self.system_sounds_session = None
+
+                # Refresh and try again
+                if self._refresh_system_sounds_session():
+                    try:
+                        self.system_sounds_session.SetMasterVolume(adjusted_level, None)
                         return True
                     except Exception as e:
-                        log_error(e, f"Error setting volume for {app_name}")
+                        log_error(e, "Error setting system sounds volume after refresh")
 
-            return False
+                # Alternative: Try to find in app_sessions (some systems show it there)
+                self.get_all_audio_apps()
+                for app_name in ["AudioSrv.Dll", "System Sounds", "svchost.exe"]:
+                    if app_name in self.app_sessions:
+                        try:
+                            # Apply to all instances
+                            for session in self.app_sessions[app_name]:
+                                session.SetMasterVolume(adjusted_level, None)
+                            return True
+                        except Exception as e:
+                            log_error(e, f"Error setting volume for {app_name}")
+
+                return False
+
+            return self._safe_com_operation(
+                set_system_volume_operation,
+                "set system sounds volume",
+                default_return=False
+            )
 
         except Exception as e:
             log_error(e, "Error setting system sounds volume")
@@ -719,14 +847,29 @@ class AudioManager:
         try:
             if not AUDIO_AVAILABLE or not self.master_volume:
                 return 0.5
-            return self.master_volume.GetMasterVolumeLevelScalar()
+
+            def get_volume_operation():
+                return self.master_volume.GetMasterVolumeLevelScalar()
+
+            volume = self._safe_com_operation(
+                get_volume_operation,
+                "get master volume",
+                default_return=0.5
+            )
+
+            return volume
+
         except Exception as e:
             log_error(e, "Error getting master volume")
             # Device might have changed, try refresh
             self.refresh_audio_devices()
             try:
                 if self.master_volume:
-                    return self.master_volume.GetMasterVolumeLevelScalar()
+                    return self._safe_com_operation(
+                        get_volume_operation,
+                        "get master volume after refresh",
+                        default_return=0.5
+                    )
             except:
                 pass
             return 0.5
@@ -736,18 +879,30 @@ class AudioManager:
         try:
             if not AUDIO_AVAILABLE or not self.master_volume:
                 return
+
             adjusted_level = self._apply_volume_curve(level, mode)
-            self.master_volume.SetMasterVolumeLevelScalar(adjusted_level, None)
+
+            def set_volume_operation():
+                self.master_volume.SetMasterVolumeLevelScalar(adjusted_level, None)
+                return True
+
+            success = self._safe_com_operation(
+                set_volume_operation,
+                "set master volume",
+                default_return=False
+            )
+
+            if not success:
+                # Device might have changed, refresh and retry
+                self.refresh_audio_devices()
+                self._safe_com_operation(
+                    set_volume_operation,
+                    "set master volume after refresh",
+                    default_return=False
+                )
+
         except Exception as e:
             log_error(e, "Error setting master volume")
-            # Device might have changed, refresh and retry
-            self.refresh_audio_devices()
-            try:
-                if self.master_volume:
-                    adjusted_level = self._apply_volume_curve(level, mode)
-                    self.master_volume.SetMasterVolumeLevelScalar(adjusted_level, None)
-            except:
-                pass
 
     def has_microphone(self):
         """Check if microphone is available"""
@@ -758,7 +913,18 @@ class AudioManager:
         try:
             if not AUDIO_AVAILABLE or not self.mic_volume:
                 return 0.5
-            return self.mic_volume.GetMasterVolumeLevelScalar()
+
+            def get_volume_operation():
+                return self.mic_volume.GetMasterVolumeLevelScalar()
+
+            volume = self._safe_com_operation(
+                get_volume_operation,
+                "get mic volume",
+                default_return=0.5
+            )
+
+            return volume
+
         except Exception as e:
             log_error(e, "Error getting mic volume")
             return 0.5
@@ -768,8 +934,19 @@ class AudioManager:
         try:
             if not AUDIO_AVAILABLE or not self.mic_volume:
                 return
+
             adjusted_level = self._apply_volume_curve(level, mode)
-            self.mic_volume.SetMasterVolumeLevelScalar(adjusted_level, None)
+
+            def set_volume_operation():
+                self.mic_volume.SetMasterVolumeLevelScalar(adjusted_level, None)
+                return True
+
+            self._safe_com_operation(
+                set_volume_operation,
+                "set mic volume",
+                default_return=False
+            )
+
         except Exception as e:
             log_error(e, "Error setting mic volume")
 
@@ -782,36 +959,43 @@ class AudioManager:
             return apps
 
         try:
-            sessions = AudioUtilities.GetAllSessions()
+            def get_sessions_operation():
+                sessions = AudioUtilities.GetAllSessions()
 
-            for session in sessions:
-                if session.Process and session.Process.name():
-                    try:
-                        process_name = session.Process.name()
-                        volume_interface = session._ctl.QueryInterface(ISimpleAudioVolume)
+                for session in sessions:
+                    if session.Process and session.Process.name():
+                        try:
+                            process_name = session.Process.name()
+                            volume_interface = session._ctl.QueryInterface(ISimpleAudioVolume)
 
-                        # Store multiple instances in a list
-                        if process_name not in self.app_sessions:
-                            self.app_sessions[process_name] = []
+                            # Store multiple instances in a list
+                            if process_name not in self.app_sessions:
+                                self.app_sessions[process_name] = []
 
-                        self.app_sessions[process_name].append(volume_interface)
+                            self.app_sessions[process_name].append(volume_interface)
 
-                        # For the return dict, get the average volume of all instances
-                        volume = volume_interface.GetMasterVolume()
-                        if process_name in apps:
-                            # Average with existing volume
-                            apps[process_name] = (apps[process_name] + volume) / 2
-                        else:
-                            apps[process_name] = volume
+                            # For the return dict, get the average volume of all instances
+                            volume = volume_interface.GetMasterVolume()
+                            if process_name in apps:
+                                # Average with existing volume
+                                apps[process_name] = (apps[process_name] + volume) / 2
+                            else:
+                                apps[process_name] = volume
 
-                    except Exception as e:
-                        log_error(e, f"Error processing session for {session.Process.name()}")
-                        continue
+                        except Exception as e:
+                            log_error(e, f"Error processing session for {session.Process.name()}")
+                            continue
+                return apps
+
+            return self._safe_com_operation(
+                get_sessions_operation,
+                "get all audio apps",
+                default_return={}
+            )
 
         except Exception as e:
             log_error(e, "Error getting audio applications")
-
-        return apps
+            return {}
 
     def get_app_volume(self, app_name):
         """Get volume for specific application - returns average if multiple instances"""
@@ -833,12 +1017,18 @@ class AudioManager:
                 valid_sessions = 0
 
                 for session in sessions:
-                    try:
-                        total_volume += session.GetMasterVolume()
+                    def get_volume_operation(session_obj=session):
+                        return session_obj.GetMasterVolume()
+
+                    volume = self._safe_com_operation(
+                        lambda: get_volume_operation(),
+                        f"get app volume for {app_name}",
+                        default_return=None
+                    )
+
+                    if volume is not None:
+                        total_volume += volume
                         valid_sessions += 1
-                    except Exception as e:
-                        log_error(e, f"Error getting volume for one instance of {app_name}")
-                        continue
 
                 if valid_sessions > 0:
                     return total_volume / valid_sessions
