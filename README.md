@@ -38,6 +38,7 @@ A physical volume mixer with programmable buttons for Windows, inspired by [Deej
 #### Option 1: Pre-built Executable (Windows)
 1. Releases will be uploaded on the [Releases](../../releases) page
 2. For now you can build the code or download and run `DeskMixer.exe` from the [src/dist/](src/dist/) folder
+> **Note** windows flags the build as a virus, if so, you can build it yourself with the included builders.
 
 #### Option 2: Run from Source
 1. Clone the repository:
@@ -104,7 +105,18 @@ In the **Volume** tab:
 - **🔊 Volume Up**: Increase system volume
 - **🔉 Volume Down**: Decrease system volume
 - **🔇 Mute**: Toggle mute for system, microphone or specific application
-- **🔀 Switch Audio Output**: Switch between available audio output devices (this is a work in progress hope I can nail it)
+- **🔀 Switch Audio Output**: Switch between available audio output devices
+
+
+> **Note** You need AudioDeviceCmdlets for the audio output switching to work  
+>Installation Instructions:
+>1. Open PowerShell as Administrator
+   (Right-click Start → Windows PowerShell (Admin))
+>2. Run this command:
+   Install-Module -Name AudioDeviceCmdlets -Force
+>3. If prompted about repository trust, type 'Y' and press Enter
+>4. Wait for installation to complete
+>5. Restart this application
 - **⌨️ Keybind (Custom)**: Execute custom keyboard shortcuts (e.g., Ctrl+C, Alt+Tab)
 - **🚀 Launch App**: Start or focus a specific application
 
@@ -126,3 +138,5 @@ To create your own executable:
 ```bash
 cd src
 python build_app.py
+
+python build_nuitka.py
