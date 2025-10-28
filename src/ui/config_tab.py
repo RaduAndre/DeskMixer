@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 # serial.tools.list_ports is no longer needed here, moved to ConfigSerialSection
 from config.config_manager import ConfigManager
-from serial_comm.serial_handler import SerialHandler # Still needed for serial_handler object
+from serial_comm.serial_handler import SerialHandler  # Still needed for serial_handler object
 from utils.error_handler import handle_error, log_error
 
 # NEW IMPORTS
@@ -21,7 +21,7 @@ class ConfigTab:
         self.frame = tk.Frame(parent, bg="#1e1e1e")
         self.config_manager = ConfigManager()
         self.serial_handler = SerialHandler(config_manager=self.config_manager)
-        self.unsaved_changes = False # Keep unsaved_changes for older checks
+        self.unsaved_changes = False  # Keep unsaved_changes for older checks
 
         # NEW: Initialize helpers
         self.helpers = ConfigHelpers(self.audio_manager, self.config_manager)
@@ -46,8 +46,6 @@ class ConfigTab:
         self.frame.bind('<Configure>', self._on_resize)
 
         self.audio_manager.set_handlers(self.serial_handler, self.config_manager)
-
-    # _auto_connect removed: moved to ConfigSerialSection.auto_connect
 
     def _on_resize(self, event):
         """Handle window resize events"""
@@ -84,23 +82,23 @@ class ConfigTab:
             )
             self.serial_section.frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
 
-
-            # Variable Bindings Section
+            # Variable Bindings Section - NOW PASSES SERIAL_HANDLER
             self.bindings_section = ConfigBindingsSection(
                 main_container,
                 self.audio_manager,
                 self.config_manager,
-                self.helpers
+                self.helpers,
+                self.serial_handler  # Pass serial_handler for auto-configuration
             )
             self.bindings_section.frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
-
-            # Button Bindings Section
+            # Button Bindings Section - NOW PASSES SERIAL_HANDLER
             self.button_section = ConfigButtonSection(
                 main_container,
                 self.audio_manager,
                 self.config_manager,
-                self.helpers
+                self.helpers,
+                self.serial_handler  # Pass serial_handler for auto-configuration
             )
             self.button_section.frame.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
 
@@ -108,12 +106,11 @@ class ConfigTab:
         except Exception as e:
             handle_error(e, "Failed to create config tab UI")
 
-
     def _refresh_all_app_lists(self):
         """Refresh all app dropdowns in the binding rows and button rows"""
         try:
             targets = self.helpers.get_available_targets()
-            
+
             # 1. Refresh Variable Bindings
             if self.bindings_section:
                 # Update all comboboxes in bindings
@@ -142,13 +139,10 @@ class ConfigTab:
                                         if current_value in targets:
                                             subchild.set(current_value)
 
-
             messagebox.showinfo("Refreshed", "All application lists updated!")
 
         except Exception as e:
             log_error(e, "Error refreshing all app lists")
-
-
 
     def _load_config(self):
         """Load configuration from file and pass to sections"""
@@ -165,7 +159,3 @@ class ConfigTab:
 
         except Exception as e:
             log_error(e, "Error loading configuration")
-
-    # _auto_save_binding removed: moved to ConfigBindingsSection
-    # _delete_binding removed: moved to ConfigBindingsSection
-    # _check_duplicate_binding removed: moved to ConfigHelpers

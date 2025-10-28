@@ -1,16 +1,20 @@
 // --- CONSTANTS ---
 const int NUM_SLIDERS = 4;
-const int analogInputs[NUM_SLIDERS] = {33, 32, 35, 34};
-
 const int NUM_BUTTONS = 6;
+
+const int analogInputs[NUM_SLIDERS] = {33, 32, 35, 34};
 const int buttonInputs[NUM_BUTTONS] = {27, 25, 14, 26, 12, 13};
 
 // Define the interval (in milliseconds) for sending slider data
-const long SEND_INTERVAL_MS = 10; 
+const long SEND_INTERVAL_MS = 10;
 
 // Handshake constants
 const String HANDSHAKE_REQUEST = "DeskMixer controller request";
 const String HANDSHAKE_RESPONSE = "DeskMixer Controller Ready";
+
+// Configuration request constants
+const String CONFIG_REQUEST = "GET_CONFIG";
+const String CONFIG_RESPONSE = "CONFIG:SLIDERS:" + String(NUM_SLIDERS) + ":BUTTONS:" + String(NUM_BUTTONS);
 
 // --- GLOBAL VARIABLES ---
 
@@ -60,7 +64,7 @@ void setup() {
 // --- MAIN LOOP ---
 
 void loop() {
-  // 0. Check for incoming serial commands (handshake requests)
+  // 0. Check for incoming serial commands (handshake requests and config requests)
   checkSerialInput();
 
   // 1. Read all physical inputs
@@ -87,7 +91,7 @@ void loop() {
 
 // --- SERIAL INPUT HANDLER ---
 
-// Check for incoming serial commands (like handshake requests)
+// Check for incoming serial commands (like handshake requests and config requests)
 void checkSerialInput() {
   while (Serial.available() > 0) {
     char inChar = (char)Serial.read();
@@ -115,6 +119,11 @@ void processSerialCommand(String command) {
     Serial.println(HANDSHAKE_RESPONSE);
   }
 
+  // Handle configuration request
+  else if (command == CONFIG_REQUEST) {
+    Serial.println(CONFIG_RESPONSE);
+  }
+
   // Future commands can be added here (e.g., LED control, configuration, etc.)
 }
 
@@ -139,15 +148,13 @@ void readCurrentValues() {
 // --- DATA TRANSMISSION FUNCTIONS ---
 
 // Sends all slider data on a single line continuously.
-// Format: s1 512|s2 1023|...
+// Format: Slider 1 512|Slider 2 1023|...
 void sendContinuousSliderValues() {
-  // We use C-style strings and Serial.print for better performance on memory-constrained devices,
-  // but keeping your original String object logic for consistency.
   String builtString = "";
 
-  // Append Slider Values (s1, s2, s3, etc.)
+  // Append Slider Values (Slider 1, Slider 2, Slider 3, etc.)
   for (int i = 0; i < NUM_SLIDERS; i++) {
-    builtString += "s";
+    builtString += "Slider ";
     builtString += String(i + 1);
     builtString += " "; // Space is part of the required format
     builtString += String(analogSliderValues[i]);
@@ -174,8 +181,8 @@ void checkAndSendButtonEvents() {
 
     // Check for a RISING EDGE (button just pressed: 0 -> 1)
     if (current == 1 && previous == 0) {
-      // Button was just pressed. Send a separate line event: bX 1
-      String eventString = "b";
+      // Button was just pressed. Send a separate line event: Button X 1
+      String eventString = "Button ";
       eventString += String(i + 1);
       eventString += " 1";
       Serial.println(eventString);

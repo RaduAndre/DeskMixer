@@ -9,11 +9,13 @@ from utils.error_handler import log_error
 class ConfigButtonSection:
     """Handles the Button Bindings UI and logic."""
 
-    def __init__(self, parent_frame, audio_manager, config_manager, common_helpers):
+    def __init__(self, parent_frame, audio_manager, config_manager, common_helpers, serial_handler=None):
         self.audio_manager = audio_manager
         self.config_manager = config_manager
         self.helpers = common_helpers
-        self.button_binding_rows = []
+        self.serial_handler = serial_handler
+        self.button_binding_rows = {}  # Store rows by button name
+        self.device_button_count = 0  # Track device configuration
 
         self.button_canvas = None
         self.button_container = None
@@ -22,6 +24,112 @@ class ConfigButtonSection:
         self._setup_async_loop()
 
         self._create_ui(parent_frame)
+
+        # Register for configuration updates if serial_handler is provided
+        if self.serial_handler:
+            self.serial_handler.add_config_callback(self._on_device_config)
+
+    def _on_device_config(self, slider_count, button_count):
+        """Handle device configuration updates - automatically create/remove button binding rows"""
+        try:
+            self.device_button_count = button_count
+            print(f"Device config: {button_count} buttons, creating/updating binding rows")
+            self._synchronize_button_bindings(button_count)
+        except Exception as e:
+            log_error(e, "Error creating button bindings from device config")
+
+    def _synchronize_button_bindings(self, device_button_count):
+        """Synchronize UI with device configuration - create missing or remove extra rows"""
+        try:
+            # Get current config bindings
+            config = self.config_manager.load_config()
+            config_bindings = config.get('button_bindings', {})
+
+            # Find which buttons exist in config
+            config_buttons = set()
+            for button_name in config_bindings.keys():
+                if button_name.startswith('b') and button_name[1:].isdigit():
+                    config_buttons.add(int(button_name[1:]))
+
+            print(f"Config has buttons: {sorted(config_buttons)}")
+            print(f"Device has buttons: {list(range(1, device_button_count + 1))}")
+
+            # Create set of required buttons (union of config and device)
+            required_buttons = set(range(1, device_button_count + 1)).union(config_buttons)
+            print(f"Required buttons: {sorted(required_buttons)}")
+
+            # Remove UI rows for buttons that are not in required_buttons
+            rows_to_remove = []
+            for button_name, row_data in self.button_binding_rows.items():
+                if button_name.startswith('b'):
+                    button_num = int(button_name[1:])
+                    if button_num not in required_buttons:
+                        rows_to_remove.append(button_name)
+
+            for button_name in rows_to_remove:
+                row_data = self.button_binding_rows[button_name]
+                row_data['frame'].destroy()
+                del self.button_binding_rows[button_name]
+                print(f"Removed UI row for {button_name} (not in device or config)")
+
+            # Create UI rows for missing buttons
+            for button_num in sorted(required_buttons):
+                button_name = f"b{button_num}"
+                display_name = f"Button {button_num}"
+
+                # Skip if row already exists
+                if button_name in self.button_binding_rows:
+                    continue
+
+                # Check if binding exists in config
+                config = self.config_manager.load_config()
+                button_bindings = config.get('button_bindings', {})
+                binding_data = button_bindings.get(button_name, {})
+
+                if isinstance(binding_data, dict):
+                    action = binding_data.get('action', '')
+                    target = binding_data.get('target', '')
+                    keybind = binding_data.get('keybind', '')
+                    app_path = binding_data.get('app_path', '')
+                    output_mode = binding_data.get('output_mode', 'cycle')
+                    output_device = binding_data.get('output_device', '')
+                else:
+                    action = binding_data
+                    target = ''
+                    keybind = ''
+                    app_path = ''
+                    output_mode = 'cycle'
+                    output_device = ''
+
+                # Determine if this is auto-created (not in config but in device)
+                is_auto = (button_num <= device_button_count and button_num not in config_buttons)
+
+                # Create the row
+                self._add_button_binding_row(
+                    button_name=button_name,
+                    display_name=display_name,
+                    action=action,
+                    target=target,
+                    keybind=keybind,
+                    app_path=app_path,
+                    output_mode=output_mode,
+                    output_device=output_device,
+                    is_auto=is_auto
+                )
+
+                if is_auto:
+                    print(f"Auto-created UI row for {button_name}")
+                else:
+                    print(f"Created UI row for {button_name} from config")
+
+            # Update status label
+            if self.status_label:
+                visible_count = len([name for name in self.button_binding_rows.keys() if name.startswith('b')])
+                self.status_label.config(
+                    text=f"Showing {visible_count} button bindings ({device_button_count} from device)")
+
+        except Exception as e:
+            log_error(e, "Error synchronizing button bindings")
 
     def _setup_async_loop(self):
         """Setup asyncio event loop for async operations"""
@@ -53,7 +161,7 @@ class ConfigButtonSection:
         try:
             button_frame = tk.LabelFrame(
                 parent,
-                text="Button Bindings (b1, b2, b3...) - Actions",
+                text="Button Bindings - Actions",
                 bg="#2d2d2d",
                 fg="white",
                 font=("Arial", 10, "bold"),
@@ -65,7 +173,7 @@ class ConfigButtonSection:
 
             help_text = tk.Label(
                 button_frame,
-                text="Bind serial buttons to actions: Play/Pause, Mute, Next Track, Volume Up/Down, Custom Keybinds, etc.",
+                text="Bind the preffered actions to the button of your liking",
                 bg="#2d2d2d",
                 fg="#888888",
                 font=("Arial", 8),
@@ -112,23 +220,16 @@ class ConfigButtonSection:
             self.button_container.bind("<Enter>", lambda e: self.button_canvas.bind_all("<MouseWheel>", _on_mousewheel))
             self.button_container.bind("<Leave>", lambda e: self.button_canvas.unbind_all("<MouseWheel>"))
 
-            btn_container = tk.Frame(button_frame, bg="#2d2d2d")
-            btn_container.grid(row=2, column=0, sticky="ew", pady=5)
-            btn_container.grid_columnconfigure(0, weight=1)
-
-            add_button_btn = tk.Button(
-                btn_container,
-                text="➕ Add Button Binding",
-                command=self._add_button_binding_row,
-                bg="#404040",
-                fg="white",
-                font=("Arial", 9, "bold"),
-                relief="flat",
-                padx=10,
-                pady=5,
-                cursor="hand2"
+            # Status label for auto-creation
+            self.status_label = tk.Label(
+                button_frame,
+                text="Connect device to automatically synchronize button bindings",
+                bg="#2d2d2d",
+                fg="#888888",
+                font=("Arial", 9, "italic"),
+                wraplength=850
             )
-            add_button_btn.grid(row=0, column=0)
+            #self.status_label.grid(row=2, column=0, sticky="ew", pady=5)
 
             self.frame = button_frame
 
@@ -137,32 +238,64 @@ class ConfigButtonSection:
 
     def load_bindings(self, config):
         """Load bindings from config and create UI rows."""
-        for button_name, binding in config.get('button_bindings', {}).items():
-            if isinstance(binding, dict):
-                action = binding.get('action', '')
-                target = binding.get('target', '')
-                keybind = binding.get('keybind', '')
-                app_path = binding.get('app_path', '')
-                output_mode = binding.get('output_mode', 'cycle')
-                output_device = binding.get('output_device', '')
-            else:
-                action = binding
-                target = ''
-                keybind = ''
-                app_path = ''
-                output_mode = 'cycle'
-                output_device = ''
+        try:
+            # Clear existing rows first
+            for widget in self.button_container.winfo_children():
+                widget.destroy()
 
-            if button_name and action:
-                self._add_button_binding_row(
-                    button_name=button_name,
-                    action=action,
-                    target=target,
-                    keybind=keybind,
-                    app_path=app_path,
-                    output_mode=output_mode,
-                    output_device=output_device
-                )
+            self.button_binding_rows = {}
+
+            # If device is connected, use device-based synchronization
+            if self.device_button_count > 0:
+                self._synchronize_button_bindings(self.device_button_count)
+            else:
+                # Load bindings from config (no device connected)
+                button_bindings = config.get('button_bindings', {})
+
+                for button_name, binding in button_bindings.items():
+                    if isinstance(binding, dict):
+                        action = binding.get('action', '')
+                        target = binding.get('target', '')
+                        keybind = binding.get('keybind', '')
+                        app_path = binding.get('app_path', '')
+                        output_mode = binding.get('output_mode', 'cycle')
+                        output_device = binding.get('output_device', '')
+                    else:
+                        action = binding
+                        target = ''
+                        keybind = ''
+                        app_path = ''
+                        output_mode = 'cycle'
+                        output_device = ''
+
+                    if button_name:
+                        # Create display name
+                        if button_name.startswith('b'):
+                            button_num = button_name[1:]
+                            display_name = f"Button {button_num}"
+                        else:
+                            display_name = button_name
+
+                        self._add_button_binding_row(
+                            button_name=button_name,
+                            display_name=display_name,
+                            action=action,
+                            target=target,
+                            keybind=keybind,
+                            app_path=app_path,
+                            output_mode=output_mode,
+                            output_device=output_device,
+                            is_auto=False
+                        )
+
+                # Update status label
+                if self.status_label:
+                    button_count = len([name for name in button_bindings.keys() if name.startswith('b')])
+                    self.status_label.config(
+                        text=f"Showing {button_count} button bindings from config (no device connected)")
+
+        except Exception as e:
+            log_error(e, "Error loading button bindings")
 
     def _get_audio_output_devices(self):
         """Get available audio output device names"""
@@ -213,11 +346,10 @@ class ConfigButtonSection:
 
         self._run_async(refresh())
 
-    def _auto_save_button_binding(self, button_entry, action_combo, target_combo,
+    def _auto_save_button_binding(self, button_name, action_combo, target_combo,
                                   keybind_entry, app_path_entry, output_mode_combo, output_device_combo):
         """Automatically save button binding when changes occur."""
         try:
-            button_name = button_entry.get().strip()
             action = self.helpers.normalize_action_name(action_combo.get().strip())
 
             if not button_name or not button_name.startswith('b'):
@@ -265,29 +397,32 @@ class ConfigButtonSection:
             log_error(e, "Error auto-saving button binding")
             return False
 
-    def _add_button_binding_row(self, button_name="", action="", target="",
-                                keybind="", app_path="", output_mode="cycle", output_device=""):
+    def _add_button_binding_row(self, button_name="", display_name="", action="", target="",
+                                keybind="", app_path="", output_mode="cycle", output_device="", is_auto=False):
         """Add a button binding row with responsive layout"""
         try:
             row_frame = tk.Frame(self.button_container, bg="#353535", padx=6, pady=4)
             row_frame.pack(fill="x", padx=3, pady=2)
 
+            # Store row data
+            self.button_binding_rows[button_name] = {
+                'frame': row_frame,
+                'is_auto': is_auto,
+                'button_name': button_name
+            }
+
             row_frame.grid_columnconfigure(1, weight=0)
             row_frame.grid_columnconfigure(3, weight=0)
             row_frame.grid_columnconfigure(5, weight=1)
 
-            # Button name
+            # Button name (display only, not editable)
             tk.Label(
                 row_frame,
-                text="Button (bX):",
+                text=f"{display_name}:",
                 bg="#353535",
                 fg="white",
-                font=("Arial", 9)
+                font=("Arial", 9, "bold")
             ).grid(row=0, column=0, padx=2, sticky="w")
-
-            button_entry = tk.Entry(row_frame, width=8, font=("Arial", 9))
-            button_entry.insert(0, button_name)
-            button_entry.grid(row=0, column=1, padx=2, sticky="w")
 
             tk.Label(
                 row_frame,
@@ -295,7 +430,7 @@ class ConfigButtonSection:
                 bg="#353535",
                 fg="#00ff00",
                 font=("Arial", 10, "bold")
-            ).grid(row=0, column=2, padx=2)
+            ).grid(row=0, column=1, padx=2)
 
             # Action dropdown
             tk.Label(
@@ -304,7 +439,7 @@ class ConfigButtonSection:
                 bg="#353535",
                 fg="white",
                 font=("Arial", 9)
-            ).grid(row=0, column=3, padx=2, sticky="w")
+            ).grid(row=0, column=2, padx=2, sticky="w")
 
             actions = self.helpers.get_available_actions()
 
@@ -317,7 +452,7 @@ class ConfigButtonSection:
                 width=18,
                 font=("Arial", 9)
             )
-            action_combo.grid(row=0, column=4, padx=2, sticky="w")
+            action_combo.grid(row=0, column=3, padx=2, sticky="w")
 
             if action:
                 display_action = self.helpers.get_action_display_name(action)
@@ -326,7 +461,7 @@ class ConfigButtonSection:
 
             # Dynamic elements container
             dynamic_frame = tk.Frame(row_frame, bg="#353535")
-            dynamic_frame.grid(row=0, column=5, padx=2, sticky="ew")
+            dynamic_frame.grid(row=0, column=4, padx=2, sticky="ew")
 
             # Target (for mute action)
             target_label = tk.Label(
@@ -428,11 +563,10 @@ class ConfigButtonSection:
             # BIND AUTO-SAVE TO ALL ENTRIES
             def auto_save_wrapper(e=None):
                 return self._auto_save_button_binding(
-                    button_entry, action_combo, target_combo,
+                    button_name, action_combo, target_combo,
                     keybind_entry, app_path_entry, output_mode_combo, output_mode_combo
                 )
 
-            button_entry.bind('<FocusOut>', auto_save_wrapper)
             target_combo.bind('<<ComboboxSelected>>', auto_save_wrapper)
             keybind_entry.bind('<FocusOut>', auto_save_wrapper)
             app_path_entry.bind('<FocusOut>', auto_save_wrapper)
@@ -457,7 +591,7 @@ class ConfigButtonSection:
                 elif action_name == "switch_audio_output":
                     output_label.pack(side="left", padx=2)
                     output_mode_combo.pack(side="left", padx=2)
-
+                    refresh_btn.pack(side="left", padx=2)
 
             # BIND AUTO-SAVE TO ACTION COMBO AND CALL on_action_change
             action_combo.bind('<<ComboboxSelected>>',
@@ -468,7 +602,7 @@ class ConfigButtonSection:
 
             # Button container
             btn_frame = tk.Frame(row_frame, bg="#353535")
-            btn_frame.grid(row=0, column=6, padx=2, sticky="e")
+            btn_frame.grid(row=0, column=5, padx=2, sticky="e")
 
             # Test button
             test_btn = tk.Button(
@@ -491,11 +625,11 @@ class ConfigButtonSection:
             )
             test_btn.pack(side="left", padx=1)
 
-            # Delete button
-            delete_btn = tk.Button(
+            # Clear binding button (instead of delete)
+            clear_btn = tk.Button(
                 btn_frame,
                 text="🗑",
-                command=lambda: self._delete_button_binding(button_entry.get(), row_frame),
+                command=lambda: self._clear_button_binding(button_name, row_frame, action_combo, dynamic_frame),
                 bg="#5c1a1a",
                 fg="white",
                 font=("Arial", 9),
@@ -504,9 +638,7 @@ class ConfigButtonSection:
                 pady=2,
                 cursor="hand2"
             )
-            delete_btn.pack(side="left", padx=1)
-
-            self.button_binding_rows.append(row_frame)
+            clear_btn.pack(side="left", padx=1)
 
         except Exception as e:
             log_error(e, "Error adding button binding row")
@@ -546,14 +678,19 @@ class ConfigButtonSection:
             messagebox.showerror("Error", f"Error testing button action: {str(e)}")
             log_error(e, "Error testing button action")
 
-    def _delete_button_binding(self, button_name, frame):
-        """Delete a button binding"""
+    def _clear_button_binding(self, button_name, frame, action_combo, dynamic_frame):
+        """Clear a button binding (set to empty action) instead of deleting"""
         try:
             if button_name:
-                self.config_manager.remove_button_binding(button_name)
-            frame.destroy()
-            if frame in self.button_binding_rows:
-                self.button_binding_rows.remove(frame)
+                # Clear the binding in config
+                self.config_manager.add_button_binding(button_name, {})
+
+                # Clear the UI
+                action_combo.set('')
+
+                # Clear dynamic frame
+                for widget in dynamic_frame.winfo_children():
+                    widget.pack_forget()
 
         except Exception as e:
-            log_error(e, "Error deleting button binding")
+            log_error(e, "Error clearing button binding")

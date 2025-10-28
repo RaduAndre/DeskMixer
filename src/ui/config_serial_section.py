@@ -76,7 +76,7 @@ class ConfigSerialSection:
                 fg="#888888",
                 font=("Arial", 8)
             )
-            self.serial_details_label.grid(row=1, column=0, sticky="w", pady=(0, 10))
+           # self.serial_details_label.grid(row=1, column=0, sticky="w", pady=(0, 10))
 
             # Row 2: Settings checkboxes
             settings_frame = tk.Frame(controls, bg="#2d2d2d")

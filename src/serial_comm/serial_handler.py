@@ -1,5 +1,6 @@
 import threading
 import time
+import re
 from utils.error_handler import log_error
 
 try:
@@ -41,8 +42,15 @@ class SerialHandler:
         self.last_ports_check = 0
         self.ports_check_interval = 2  # seconds between port availability checks
 
+        # NEW: Device configuration
+        self.slider_count = 0
+        self.button_count = 0
+        self.config_request = "GET_CONFIG"
+        self.config_received = False
+        self.config_callbacks = []
+
     def auto_connect(self):
-        """Automatically connect to device with handshake"""
+        """Automatically connect to device with handshake and get configuration"""
         if not WINDOWS_AVAILABLE:
             log_error(Exception("pywin32 not available"), "Cannot connect without pywin32")
             self._notify_status("disconnected", "pywin32 not available")
@@ -58,7 +66,7 @@ class SerialHandler:
 
             if saved_port:
                 print(f"Trying saved port: {saved_port} at {saved_baud} baud")
-                if self._try_connect_with_handshake(saved_port, int(saved_baud)):
+                if self._try_connect_with_handshake_and_config(saved_port, int(saved_baud)):
                     return True
                 else:
                     print(f"Could not connect to saved port: {saved_port}")
@@ -95,7 +103,7 @@ class SerialHandler:
             current_port_names = [port.device for port in available_ports]
             if previous_port in current_port_names:
                 print(f"Priority: Trying previously connected port: {previous_port}")
-                if self._try_connect_with_handshake(previous_port, self.baud_rate):
+                if self._try_connect_with_handshake_and_config(previous_port, self.baud_rate):
                     return True
                 else:
                     print(f"Previous port {previous_port} is not responding correctly")
@@ -109,14 +117,14 @@ class SerialHandler:
                 continue
 
             print(f"Trying port: {port_name}")
-            if self._try_connect_with_handshake(port_name, self.baud_rate):
+            if self._try_connect_with_handshake_and_config(port_name, self.baud_rate):
                 return True
 
         print(f"No compatible device found on any of {port_count} available port(s)")
         return False
 
-    def _try_connect_with_handshake(self, port, baud_rate):
-        """Try to connect to a port and perform handshake"""
+    def _try_connect_with_handshake_and_config(self, port, baud_rate):
+        """Try to connect to a port and perform handshake and get configuration"""
         try:
             # Attempt basic connection
             if not self._connect_port(port, baud_rate):
@@ -128,14 +136,25 @@ class SerialHandler:
             # Perform handshake
             if self._perform_handshake():
                 print(f"✓ Connected successfully to {port}")
-                self._notify_status("connected", f"Connected to {port}")
 
-                # ✅ ADD THIS: Save successful connection to config
-                if self.config_manager:
-                    self.config_manager.set_last_connected_port(port, baud_rate)
-                    self.config_manager.save_config()
+                # Get device configuration
+                if self._get_device_config():
+                    print(f"✓ Device configuration: {self.slider_count} sliders, {self.button_count} buttons")
+                    self._notify_status("connected",
+                                        f"Connected to {port} - {self.slider_count} sliders, {self.button_count} buttons")
 
-                return True
+                    # Save successful connection to config
+                    if self.config_manager:
+                        self.config_manager.set_last_connected_port(port, baud_rate)
+                        self.config_manager.save_config()
+
+                    # Notify configuration callbacks
+                    self._notify_config()
+                    return True
+                else:
+                    print(f"✗ Could not get device configuration from {port}")
+                    self._disconnect_internal()
+                    return False
             else:
                 print(f"✗ Handshake failed on {port} - not a compatible device")
                 self._disconnect_internal()
@@ -146,6 +165,58 @@ class SerialHandler:
             self._disconnect_internal()
             return False
 
+    def _perform_handshake(self):
+        """Perform handshake with device"""
+        try:
+            self.handshake_received = False
+
+            # Wait for device to stabilize
+            time.sleep(0.5)
+
+            # Send handshake request
+            if not self.write(self.handshake_request + "\n"):
+                return False
+
+            # Wait for response with timeout
+            start_time = time.time()
+            while time.time() - start_time < self.handshake_timeout:
+                if self.handshake_received:
+                    return True
+                time.sleep(0.1)
+
+            return False
+
+        except Exception as e:
+            log_error(e, "Error during handshake")
+            return False
+
+    def _get_device_config(self):
+        """Get device configuration (number of sliders and buttons)"""
+        try:
+            self.config_received = False
+            self.slider_count = 0
+            self.button_count = 0
+
+            # Wait a moment for device to be ready
+            time.sleep(0.5)
+
+            # Send configuration request
+            if not self.write(self.config_request + "\n"):
+                return False
+
+            # Wait for response with timeout
+            start_time = time.time()
+            while time.time() - start_time < self.handshake_timeout:
+                if self.config_received:
+                    return True
+                time.sleep(0.1)
+
+            return False
+
+        except Exception as e:
+            log_error(e, "Error getting device configuration")
+            return False
+
     def _connect_port(self, port, baud_rate):
         """Basic connection to serial port (internal method)"""
         try:
@@ -154,7 +225,7 @@ class SerialHandler:
                 port = f'\\\\.\\{port}'
 
             self.port = port
-            self.baud_rate = baud_rate  # ✅ Ensure baud rate is set
+            self.baud_rate = baud_rate
 
             # Open serial port using Windows API with overlapped I/O
             self.serial_handle = win32file.CreateFile(
@@ -199,31 +270,6 @@ class SerialHandler:
         except Exception as e:
             log_error(e, f"Failed to connect to {port}")
             self.connected = False
-            return False
-
-    def _perform_handshake(self):
-        """Perform handshake with device - CRITICAL FOR SUCCESSFUL CONNECTION"""
-        try:
-            self.handshake_received = False
-
-            # Wait for device to stabilize
-            time.sleep(0.5)
-
-            # Send handshake request
-            if not self.write(self.handshake_request + "\n"):
-                return False
-
-            # Wait for response with timeout
-            start_time = time.time()
-            while time.time() - start_time < self.handshake_timeout:
-                if self.handshake_received:
-                    return True
-                time.sleep(0.1)
-
-            return False
-
-        except Exception as e:
-            log_error(e, "Error during handshake")
             return False
 
     def disconnect(self):
@@ -460,7 +506,7 @@ class SerialHandler:
             return []
 
     def _process_data(self, data):
-        """Process received data - INCLUDES HANDSHAKE RESPONSE DETECTION"""
+        """Process received data - INCLUDES HANDSHAKE RESPONSE AND CONFIG DETECTION"""
         try:
             # Clean up and validate data
             if not data:
@@ -468,42 +514,66 @@ class SerialHandler:
 
             clean_data = data.strip()
 
-            # Check for handshake response - CRITICAL FOR CONNECTION SUCCESS
+            # Check for handshake response
             if self.handshake_response in clean_data:
                 self.handshake_received = True
                 print(f"✓ Handshake confirmed: {clean_data}")
                 return
 
-            # Handle button data immediately
-            if clean_data.startswith('b'):
-                parts = clean_data.split()
-                if len(parts) == 2 and parts[1] in ('0', '1'):
-                    for callback in self.callbacks:
-                        callback(clean_data)
+            # Check for configuration response
+            if clean_data.startswith('CONFIG:SLIDERS:'):
+                # Parse configuration: "CONFIG:SLIDERS:X:BUTTONS:Y"
+                match = re.match(r'CONFIG:SLIDERS:(\d+):BUTTONS:(\d+)', clean_data)
+                if match:
+                    self.slider_count = int(match.group(1))
+                    self.button_count = int(match.group(2))
+                    self.config_received = True
+                    print(f"✓ Configuration received: {self.slider_count} sliders, {self.button_count} buttons")
                 return
 
-            # Handle slider data (pipe-separated format)
+            # Handle button data immediately (now using "Button X" format)
+            if clean_data.startswith('Button '):
+                parts = clean_data.split()
+                if len(parts) == 3 and parts[2] in ('0', '1'):
+                    # Convert to internal format for compatibility
+                    button_num = parts[1]
+                    internal_format = f"b{button_num} {parts[2]}"
+                    for callback in self.callbacks:
+                        callback(internal_format)
+                return
+
+            # Handle slider data (pipe-separated format with "Slider X" format)
             if '|' not in clean_data:
                 return
 
-            # Validate slider data format
+            # Validate slider data format and convert to internal format
             parts = clean_data.split('|')
             valid_data = True
+            converted_parts = []
+
             for part in parts:
                 if not part.strip():
                     continue
                 try:
-                    key, value = part.strip().split()
-                    if not key.startswith('s') or not value.isdigit():
+                    # Parse "Slider X value" format
+                    sub_parts = part.strip().split()
+                    if len(sub_parts) == 3 and sub_parts[0] == 'Slider' and sub_parts[2].isdigit():
+                        slider_num = sub_parts[1]
+                        value = sub_parts[2]
+                        # Convert to internal format for compatibility
+                        converted_parts.append(f"s{slider_num} {value}")
+                    else:
                         valid_data = False
                         break
                 except ValueError:
                     valid_data = False
                     break
 
-            if valid_data:
+            if valid_data and converted_parts:
+                # Rebuild data in internal format for callbacks
+                internal_data = '|'.join(converted_parts)
                 for callback in self.callbacks:
-                    callback(clean_data)
+                    callback(internal_data)
 
         except Exception as e:
             log_error(e, "Error processing serial data")
@@ -533,6 +603,11 @@ class SerialHandler:
         if callback not in self.status_callbacks:
             self.status_callbacks.append(callback)
 
+    def add_config_callback(self, callback):
+        """Add callback for device configuration updates"""
+        if callback not in self.config_callbacks:
+            self.config_callbacks.append(callback)
+
     def _notify_status(self, status, message):
         """Notify all status callbacks of a status change"""
         for callback in self.status_callbacks:
@@ -540,6 +615,14 @@ class SerialHandler:
                 callback(status, message)
             except Exception as e:
                 log_error(e, "Error in status callback")
+
+    def _notify_config(self):
+        """Notify all config callbacks of device configuration"""
+        for callback in self.config_callbacks:
+            try:
+                callback(self.slider_count, self.button_count)
+            except Exception as e:
+                log_error(e, "Error in config callback")
 
     def write(self, data):
         """Write data to serial port"""
@@ -562,4 +645,17 @@ class SerialHandler:
         except Exception as e:
             log_error(e, "Error writing to serial port")
 
+        return False
+
+    def get_device_config(self):
+        """Get the current device configuration (slider and button counts)"""
+        return {
+            'sliders': self.slider_count,
+            'buttons': self.button_count
+        }
+
+    def request_config_update(self):
+        """Manually request a configuration update from the connected device"""
+        if self.is_connected():
+            return self._get_device_config()
         return False

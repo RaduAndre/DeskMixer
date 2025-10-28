@@ -80,7 +80,7 @@ class VolumeControllerUI:
     def _initialize_window(self):
         """Initialize the main window properties"""
         self.root.title("DeskMixer")
-        self.root.geometry("900x700")
+        self.root.geometry("700x700")
         self.root.configure(bg="#1e1e1e")
 
         # Load icon for the taskbar/window header
@@ -142,7 +142,7 @@ class VolumeControllerUI:
 
             # Add tabs to notebook
             self.notebook.add(self.config_tab.frame, text="  Configuration  ")
-            self.notebook.add(self.serial_tab.frame, text="  Serial Monitor  ")
+            #self.notebook.add(self.serial_tab.frame, text="  Serial Monitor  ")
 
         except Exception as e:
             handle_error(e, "Failed to create UI")
