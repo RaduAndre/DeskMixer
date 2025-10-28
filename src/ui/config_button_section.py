@@ -1,8 +1,9 @@
 # ui/config_button_section.py
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import asyncio
 import threading
+import os
 from utils.error_handler import log_error
 
 
@@ -91,6 +92,7 @@ class ConfigButtonSection:
                     target = binding_data.get('target', '')
                     keybind = binding_data.get('keybind', '')
                     app_path = binding_data.get('app_path', '')
+                    app_display_name = binding_data.get('app_display_name', '')  # New field
                     output_mode = binding_data.get('output_mode', 'cycle')
                     output_device = binding_data.get('output_device', '')
                 else:
@@ -98,6 +100,7 @@ class ConfigButtonSection:
                     target = ''
                     keybind = ''
                     app_path = ''
+                    app_display_name = ''
                     output_mode = 'cycle'
                     output_device = ''
 
@@ -112,6 +115,7 @@ class ConfigButtonSection:
                     target=target,
                     keybind=keybind,
                     app_path=app_path,
+                    app_display_name=app_display_name,  # Pass display name
                     output_mode=output_mode,
                     output_device=output_device,
                     is_auto=is_auto
@@ -200,7 +204,6 @@ class ConfigButtonSection:
             )
 
             self.button_container = tk.Frame(self.button_canvas, bg="#2d2d2d")
-
             self.button_container.bind(
                 "<Configure>",
                 lambda e: self.button_canvas.configure(scrollregion=self.button_canvas.bbox("all"))
@@ -229,7 +232,7 @@ class ConfigButtonSection:
                 font=("Arial", 9, "italic"),
                 wraplength=850
             )
-            #self.status_label.grid(row=2, column=0, sticky="ew", pady=5)
+            # self.status_label.grid(row=2, column=0, sticky="ew", pady=5)
 
             self.frame = button_frame
 
@@ -258,6 +261,7 @@ class ConfigButtonSection:
                         target = binding.get('target', '')
                         keybind = binding.get('keybind', '')
                         app_path = binding.get('app_path', '')
+                        app_display_name = binding.get('app_display_name', '')  # New field
                         output_mode = binding.get('output_mode', 'cycle')
                         output_device = binding.get('output_device', '')
                     else:
@@ -265,6 +269,7 @@ class ConfigButtonSection:
                         target = ''
                         keybind = ''
                         app_path = ''
+                        app_display_name = ''
                         output_mode = 'cycle'
                         output_device = ''
 
@@ -283,6 +288,7 @@ class ConfigButtonSection:
                             target=target,
                             keybind=keybind,
                             app_path=app_path,
+                            app_display_name=app_display_name,  # Pass display name
                             output_mode=output_mode,
                             output_device=output_device,
                             is_auto=False
@@ -320,8 +326,8 @@ class ConfigButtonSection:
             log_error(e, "Error getting audio devices")
             return []
 
-    def _refresh_audio_devices(self, output_mode_combo):
-        """Refresh audio device list in dropdown (async, non-blocking)"""
+    def _refresh_audio_devices_dropdown(self, output_mode_combo):
+        """Refresh audio device list in dropdown when clicked (async, non-blocking)"""
 
         async def refresh():
             try:
@@ -334,7 +340,7 @@ class ConfigButtonSection:
                         current = output_mode_combo.get()
                         output_mode_combo['values'] = output_options
                         # Keep current selection if still valid
-                        if current not in output_options:
+                        if current not in output_options and current != "Cycle Through":
                             output_mode_combo.set("Cycle Through")
                     except Exception as e:
                         log_error(e, "Error updating device list UI")
@@ -347,7 +353,8 @@ class ConfigButtonSection:
         self._run_async(refresh())
 
     def _auto_save_button_binding(self, button_name, action_combo, target_combo,
-                                  keybind_entry, app_path_entry, output_mode_combo, output_device_combo):
+                                  keybind_entry, app_path_var, app_display_name_var, output_mode_combo,
+                                  output_device_combo):
         """Automatically save button binding when changes occur."""
         try:
             action = self.helpers.normalize_action_name(action_combo.get().strip())
@@ -364,8 +371,10 @@ class ConfigButtonSection:
                 keybind = keybind_entry.get().strip()
 
             app_path = None
-            if action == "launch_app" and app_path_entry.winfo_ismapped():
-                app_path = app_path_entry.get().strip()
+            app_display_name = None
+            if action == "launch_app" and app_path_var:
+                app_path = app_path_var.get().strip()
+                app_display_name = app_display_name_var.get().strip() if app_display_name_var.get().strip() else None
 
             output_mode = None
             output_device = None
@@ -384,6 +393,7 @@ class ConfigButtonSection:
                 'target': target if target and target != "None" else None,
                 'keybind': keybind if keybind else None,
                 'app_path': app_path if app_path else None,
+                'app_display_name': app_display_name if app_display_name else None,  # Save display name
                 'output_mode': output_mode if output_mode else None,
                 'output_device': output_device if output_device else None
             }
@@ -397,8 +407,42 @@ class ConfigButtonSection:
             log_error(e, "Error auto-saving button binding")
             return False
 
+    def _browse_app_file(self, app_path_var, app_display_name_var, app_name_label):
+        """Open file dialog to select an application"""
+        try:
+            # Open file dialog to select executable files
+            file_path = filedialog.askopenfilename(
+                title="Select Application",
+                filetypes=[
+                    ("Executable files", "*.exe"),
+                    ("Application files", "*.app"),
+                    ("All files", "*.*")
+                ]
+            )
+
+            if file_path:
+                # Store the full path in the variable
+                app_path_var.set(file_path)
+
+                # Get the exact file name as written (with extension)
+                app_name = os.path.basename(file_path)
+
+                # Store the display name in the variable
+                app_display_name_var.set(app_name)
+
+                # Update the label with the app name
+                app_name_label.config(text=app_name)
+
+                return True
+            return False
+        except Exception as e:
+            log_error(e, "Error browsing for app file")
+            messagebox.showerror("Error", f"Could not select application: {str(e)}")
+            return False
+
     def _add_button_binding_row(self, button_name="", display_name="", action="", target="",
-                                keybind="", app_path="", output_mode="cycle", output_device="", is_auto=False):
+                                keybind="", app_path="", app_display_name="", output_mode="cycle", output_device="",
+                                is_auto=False):
         """Add a button binding row with responsive layout"""
         try:
             row_frame = tk.Frame(self.button_container, bg="#353535", padx=6, pady=4)
@@ -498,18 +542,54 @@ class ConfigButtonSection:
             if keybind and isinstance(keybind, str):
                 keybind_entry.insert(0, keybind)
 
-            # App path entry (shown when action is launch_app)
+            # App path selection (shown when action is launch_app)
             app_path_label = tk.Label(
                 dynamic_frame,
-                text="Path:",
+                text="App:",
                 bg="#353535",
                 fg="white",
                 font=("Arial", 9)
             )
 
-            app_path_entry = tk.Entry(dynamic_frame, width=25, font=("Arial", 9))
+            # Variables for app selection
+            app_path_var = tk.StringVar()
+            app_display_name_var = tk.StringVar()  # New variable for display name
+
             if app_path and isinstance(app_path, str):
-                app_path_entry.insert(0, app_path)
+                app_path_var.set(app_path)
+                # Use the stored display name if available, otherwise use the file name
+                if app_display_name:
+                    display_text = app_display_name
+                else:
+                    display_text = os.path.basename(app_path)
+                app_display_name_var.set(display_text)
+            else:
+                display_text = "Select App"
+                app_display_name_var.set("")
+
+            app_name_label = tk.Label(
+                dynamic_frame,
+                text=display_text,
+                bg="#404040",
+                fg="white",
+                font=("Arial", 9),
+                relief="sunken",
+                padx=5,
+                pady=2,
+                width=20
+            )
+
+            browse_button = tk.Button(
+                dynamic_frame,
+                text="📁",
+                bg="#404040",
+                fg="white",
+                font=("Arial", 9),
+                relief="raised",
+                padx=5,
+                pady=2,
+                cursor="hand2"
+            )
 
             # Audio output selector (shown when action is switch_audio_output)
             output_label = tk.Label(
@@ -546,30 +626,21 @@ class ConfigButtonSection:
             else:
                 output_mode_combo.set("Cycle Through")
 
-            # Add refresh button for audio devices
-            refresh_btn = tk.Button(
-                dynamic_frame,
-                text="🔄",
-                command=lambda: self._refresh_audio_devices(output_mode_combo),
-                bg="#404040",
-                fg="white",
-                font=("Arial", 8),
-                relief="flat",
-                padx=3,
-                pady=1,
-                cursor="hand2"
-            )
+            # Refresh audio devices when dropdown is clicked
+            def on_dropdown_click(event):
+                self._refresh_audio_devices_dropdown(output_mode_combo)
+
+            output_mode_combo.bind('<Button-1>', on_dropdown_click)
 
             # BIND AUTO-SAVE TO ALL ENTRIES
             def auto_save_wrapper(e=None):
                 return self._auto_save_button_binding(
                     button_name, action_combo, target_combo,
-                    keybind_entry, app_path_entry, output_mode_combo, output_mode_combo
+                    keybind_entry, app_path_var, app_display_name_var, output_mode_combo, output_mode_combo
                 )
 
             target_combo.bind('<<ComboboxSelected>>', auto_save_wrapper)
             keybind_entry.bind('<FocusOut>', auto_save_wrapper)
-            app_path_entry.bind('<FocusOut>', auto_save_wrapper)
             output_mode_combo.bind('<<ComboboxSelected>>', auto_save_wrapper)
 
             # Show/hide elements based on action
@@ -587,11 +658,17 @@ class ConfigButtonSection:
                     target_combo.pack(side="left", padx=2)
                 elif action_name == "launch_app":
                     app_path_label.pack(side="left", padx=2)
-                    app_path_entry.pack(side="left", padx=2)
+                    app_name_label.pack(side="left", padx=2)
+                    browse_button.pack(side="left", padx=2)
+
+                    # Set up browse button command
+                    browse_button.config(
+                        command=lambda: self._browse_app_file(app_path_var, app_display_name_var, app_name_label)
+                    )
                 elif action_name == "switch_audio_output":
                     output_label.pack(side="left", padx=2)
                     output_mode_combo.pack(side="left", padx=2)
-                    refresh_btn.pack(side="left", padx=2)
+                    # Note: Refresh button removed - devices refresh automatically on click
 
             # BIND AUTO-SAVE TO ACTION COMBO AND CALL on_action_change
             action_combo.bind('<<ComboboxSelected>>',
@@ -612,7 +689,7 @@ class ConfigButtonSection:
                     self.helpers.normalize_action_name(action_var.get()),
                     self.helpers.normalize_target_name(target_var.get()) if target_var.get() else "",
                     keybind_entry.get(),
-                    app_path_entry.get(),
+                    app_path_var.get() if app_path_var else "",
                     output_var.get()
                 ),
                 bg="#404040",
