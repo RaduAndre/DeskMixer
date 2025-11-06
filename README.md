@@ -134,7 +134,27 @@ Want more controls? Simply:
 1. Download `DeskMixer.exe` from the [Releases](https://github.com/RaduAndre/DeskMixer/releases) page or from [src/dist/](src/dist/)
 2. Run the executable
 
-**Note:** Windows may flag the executable as unknown. This is a false positive due to the app being unsigned. You can safely ignore it or build from source yourself.
+## ⚠️ Antivirus False Positives
+
+Some antivirus software may flag DeskMixer as suspicious. This is a **false positive** caused by:
+
+1. **Keyboard automation** - Used for custom keybinds
+2. **Audio control** - Accessing Windows audio APIs
+3. **Serial communication** - Communicating with Arduino
+4. **Unsigned executable** - No code signing certificate yet
+
+### ✅ This software is safe:
+- 🔓 **100% open source** - Review all code on GitHub
+- 🛠️ **Build it yourself** - Instructions included
+- 📝 **No network activity** - No data collection or transmission
+- 🔍 **VirusTotal scan available** - See all detection engines
+
+### If your antivirus blocks it:
+1. Add an exception for DeskMixer.exe
+2. Build from source yourself using the included scripts
+3. Run from Python directly (see Installation)
+
+**I'm working on code signing to eliminate false positives.**
 
 ### Option 2: Run from Source
 
