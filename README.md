@@ -1,142 +1,315 @@
-# DeskMixer 🎚️
+# DeskMixer 🎛️
 
-A physical volume mixer with programmable buttons for Windows, inspired by [Deej](https://github.com/omriharel/deej). DeskMixer provides a seamless experience for controlling application volumes and executing custom actions through physical sliders and buttons.
+<div align="center">
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+A physical volume mixer with programmable buttons for Windows, inspired by [Deej](https://github.com/omriharel/deej).
+
+**Control your audio and automate actions with real hardware - fully scalable to your needs!**
+
+![DeskMixer Hardware](images/hardware-image.jpg)
+
+[Features](#-features) • [Hardware](#-hardware) • [Installation](#-installation) • [Configuration](#-configuration) • [Building](#-building-from-source)
+
+</div>
+
+---
+
+## 📸 Gallery
+
+### Software Interface
+![DeskMixer UI](images/ui-screenshot.png)
+*The interface is fully scalable - add as many sliders and buttons as your hardware supports!*
+
+### DIY Hardware Build
+![DeskMixer Hardware](images/hardware-image.jpg)
+*A functional, handcrafted build - proving that professional results don't require a professional workshop!*
+
+---
 
 ## ✨ Features
 
-- **🎛️ Volume Control**: Control individual application volumes using physical sliders
-- **⌨️ Custom Keybinds**: Bind custom keyboard shortcuts to physical buttons
-- **🎮 Media Controls**: Quick access to media playback controls
-- **🔇 Mute Controls**: Instant mute/unmute for specific applications
-- **🪟 System Tray Integration**: Runs minimized in system tray with quick access
-- **⚙️ Arduino-based**: Uses ESP32/Arduino for hardware control
-- **🔌 Plug & Play**: Automatic serial port detection
-- **💾 Persistent Configuration**: Saves your settings between sessions
+### Volume Control
+- 🎛️ **Physical Sliders**: Control individual application volumes with real hardware sliders
+- 📊 **Scalable Design**: Add as many sliders as you need - the software adapts automatically
+- 🔊 **Flexible Targets**: Control master volume, microphone, system sounds, or individual apps
+- 💾 **Persistent Settings**: Your configuration is saved between sessions
 
-## 🚀 Getting Started
+### Button Actions
+- ⌨️ **Custom Keybinds**: Map any keyboard shortcut to physical buttons
+- 🎮 **Media Controls**: Play/pause, next/previous track, seek forward/backward
+- 🔇 **Mute Controls**: Instant mute/unmute for system, microphone, or specific applications
+- 🔀 **Audio Switching**: Switch between audio output devices with a button press
+- 🚀 **App Launcher**: Launch or focus applications instantly
 
-### Prerequisites
+### System Integration
+- 🪟 **System Tray**: Runs minimized with quick access
+- 🔌 **Auto-Detection**: Automatic serial port detection
+- 🔄 **Hot-Reload**: Configuration updates in real-time
+- 🎯 **Focus Tracking**: Optional control of currently active application
 
-- Python 3.13+ (for running from source)
-- Arduino IDE (for uploading firmware)
+---
+
+## 🎛️ Volume Targets
+
+The software supports multiple volume control modes:
+
+| Target | Description | Use Case |
+|--------|-------------|----------|
+| 🔊 **Master** | System master volume | Overall volume control |
+| 🎤 **Microphone** | Default microphone input | Quick mic adjustments |
+| 🔔 **System Sounds** | Windows notification sounds | Silence those pings! |
+| ⭐ **Current Application** | Currently focused app | Dynamic control of active app |
+| 🎵 **Individual Apps** | Specific applications | Dedicated controls (Spotify, Discord, etc.) |
+| ❔ **Unbinded** | No assignment | Flexible unassigned slider |
+| ❌ **None** | Disabled | Slider inactive |
+
+**Note:** The application list updates automatically based on running audio applications. **The UI scales to accommodate any number of slider bindings you create!**
+
+---
+
+## 🎮 Button Actions
+
+### Media Controls
+- ⏯️ **Play/Pause**: Toggle media playback
+- ⏭️ **Next Track**: Skip to next media track  
+- ⏮️ **Previous Track**: Go to previous media track
+- ⏩ **Seek Forward**: Jump forward in current media
+- ⏪ **Seek Backward**: Jump backward in current media
+
+### Audio Controls
+- 🔊 **Volume Up**: Increase system volume
+- 🔉 **Volume Down**: Decrease system volume
+- 🔇 **Mute**: Toggle mute for system, microphone, or specific application
+- 🔀 **Switch Audio Output**: Switch between available audio output devices*
+
+*Requires [AudioDeviceCmdlets](https://github.com/frgnca/AudioDeviceCmdlets) PowerShell module
+
+### Advanced Actions
+- ⌨️ **Custom Keybind**: Execute any keyboard shortcut (see [KEYBIND_EXAMPLES.md](KEYBIND_EXAMPLES.md))
+- 🚀 **Launch App**: Start or focus specific applications
+
+**Pro Tip:** Combine button actions with specific application targets for powerful workflows. For example:
+- Mute Discord specifically with one button
+- Launch Spotify and set volume to 50% with another
+- Send custom shortcuts to specific apps
+
+**The button configuration UI scales dynamically - add as many buttons as your microcontroller has pins!**
+
+---
+
+## 🔧 Hardware
+
+### Required Components
+- **Microcontroller**: ESP32 or compatible Arduino board
+- **Sliders**: 4x 10kΩ linear potentiometers (scalable to more)
+- **Buttons**: 6x push buttons (scalable to more)
+- **Connection**: PCB or breadboard
+- **Cable**: USB cable for serial communication
+
+### Default Pin Configuration
+You can modify these in the Arduino sketch to match your build:
+
+**Sliders:**
+- GPIO 33, 32, 35, 34
+
+**Buttons:**
+- GPIO 27, 25, 14, 26, 12, 13
+
+### Expanding Your Build
+Want more controls? Simply:
+1. Add more potentiometers/buttons to your hardware
+2. Update the pin configuration in `arduino/DeskMixer/DeskMixer.ino`
+3. Upload the modified firmware
+4. The DeskMixer software will automatically detect and configure the new inputs!
+
+### 3D Models & PCB Files
+> **Coming Soon**: 3D printable enclosure models and Gerber files for PCB manufacturing will be added in future updates!
+
+---
+
+## 📦 Installation
+
+### Option 1: Pre-built Executable (Easiest)
+
+1. Download `DeskMixer.exe` from the [Releases](https://github.com/RaduAndre/DeskMixer/releases) page or from [src/dist/](src/dist/)
+2. Run the executable
+
+**Note:** Windows may flag the executable as unknown. This is a false positive due to the app being unsigned. You can safely ignore it or build from source yourself.
+
+### Option 2: Run from Source
+
+**Requirements:**
+- Python 3.13+
+- Arduino IDE
 - ESP32 board or compatible Arduino
 
-### Hardware Requirements
+**Steps:**
 
-- ESP32 microcontroller
-- 4x 10kΩ linear potentiometers (sliders)
-- 6x push buttons
-- PCB or breadboard for connections
-- USB cable for serial communication
-
-> **Note**: 3D models and Gerber files for PCB manufacturing will be included in the following updates to the repository!
-
-### Software Installation
-
-#### Option 1: Pre-built Executable (Windows)
-1. Releases will be uploaded on the [Releases](../../releases) page
-2. For now you can build the code or download and run `DeskMixer.exe` from the [src/dist/](src/dist/) folder
-> **Note** windows flags the build as a virus, if so, you can build it yourself with the included builders.
-
-#### Option 2: Run from Source
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/DeskMixer.git
-   cd DeskMixer/src
-   ```
+```bash
+git clone https://github.com/RaduAndre/DeskMixer.git
+cd DeskMixer/src
+```
 
 2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+pip install -r requirements.txt
+```
 
 3. Run the application:
-   ```bash
-   python main.py
-   ```
+```bash
+python main.py
+```
 
-### Arduino Setup
+### Upload Firmware to Arduino
 
 1. Open `arduino/DeskMixer/DeskMixer.ino` in Arduino IDE
 2. Select your board (ESP32) and COM port
-3. Upload the sketch to your Arduino
-4. The firmware will automatically communicate with the DeskMixer application
+3. Upload the sketch
+4. The firmware will automatically communicate with DeskMixer
 
-**Pin Configuration (you can also configure it by your liking):**
-- Sliders: GPIO 33, 32, 35, 34
-- Buttons: GPIO 27, 25, 14, 26, 12, 13
+---
 
-## 🎮 Usage
+## ⚙️ Configuration
 
-### First Launch
+### First-Time Setup
 
-1. Run DeskMixer
-2. Go to the **Config** tab
-3. Select your Arduino's COM port
-4. Configure your sliders and button actions
+1. **Launch DeskMixer**
+2. **Navigate to Configuration tab**
+3. **Select COM Port**: Choose your Arduino's serial port from the dropdown
+4. **Configure Sliders**: 
+   - Click on each slider dropdown
+   - Assign to Master, Microphone, System Sounds, or specific applications
+   - Changes save automatically
+5. **Configure Buttons**:
+   - Select an action for each button
+   - Set target applications if applicable
+   - Test immediately - no restart needed!
 
-### Configuring Sliders
+### Slider Configuration
+- Assign each slider to any audio source
+- Multiple applications can share the same slider
+- Mix and match: dedicate some sliders to specific apps, leave others flexible
+- The **Current Application** target dynamically follows your active window
 
-In the **Volume** tab:
-- Assign each slider to control specific applications or system audio
-- You can assign multiple applications to the same slider
-- Adjust volumes in real-time
-- Changes are saved automatically
-
-#### Available Slider Mappings:
-- **🔊 Master**: Control the system master volume
-- **🎤 Microphone**: Control your default microphone input level
-- **🔔 System Sounds**: Control Windows system sounds
-- **⭐ Current Application**: Control the currently active/focused application (cannot override allready binded applications)
-- **🎵 Individual Applications**: Control specific running applications (e.g., Spotify, Discord, Chrome)
-- **❔ Unbinded**: Slider is not assigned to any target (cannot override current application)
-- **❌ None**: Slider is disabled
-
-> **Note**: The application list updates automatically based on currently running audio applications
-
-#### Available Button Actions:
-- **⏯️ Play/Pause**: Toggle media playback
-- **⏭️ Next Track**: Skip to next media track
-- **⏮️ Previous Track**: Go to previous media track
-- **⏩ Seek Forward**: Jump forward in current media
-- **⏪ Seek Backward**: Jump backward in current media
-- **🔊 Volume Up**: Increase system volume
-- **🔉 Volume Down**: Decrease system volume
-- **🔇 Mute**: Toggle mute for system, microphone or specific application
-- **🔀 Switch Audio Output**: Switch between available audio output devices
-
-
-> **Note** You need AudioDeviceCmdlets for the audio output switching to work  
->Installation Instructions:
->1. Open PowerShell as Administrator
-   (Right-click Start → Windows PowerShell (Admin))
->2. Run this command:
-   Install-Module -Name AudioDeviceCmdlets -Force
->3. If prompted about repository trust, type 'Y' and press Enter
->4. Wait for installation to complete
->5. Restart this application
-- **⌨️ Keybind (Custom)**: Execute custom keyboard shortcuts (e.g., Ctrl+C, Alt+Tab)
-- **🚀 Launch App**: Start or focus a specific application
-
-> **Tip**: Combine button actions with specific application targets for advanced control. For example, bind a button to mute Discord specifically, or launch your favorite music player.
-
-
-For keybind examples, see [KEYBIND_EXAMPLES.md](KEYBIND_EXAMPLES.md)
+### Button Configuration
+- Each button can have a different action
+- Combine actions with targets for app-specific control
+- Chain multiple shortcuts using custom keybinds
 
 ### System Tray
+- **Double-click** tray icon: Show/hide main window
+- **Right-click** tray icon: Quick actions menu
+- **Settings**: Enable "Start Hidden (in Tray)" to launch minimized
 
-- **Double-click** tray icon to show/hide window
-- **Right-click** for quick actions menu
-- Enable "Start Hidden (in Tray)" in settings to start minimized
+---
 
-## 🛠️ Building from Source
+## 🔧 Audio Output Switching Setup
 
-To create your own executable:
+To use the "Switch Audio Output" button action:
 
+1. Open PowerShell as Administrator
+2. Run: 
+```powershell
+Install-Module -Name AudioDeviceCmdlets -Force
+```
+3. Type 'Y' if prompted about repository trust
+4. Restart DeskMixer
+
+[More info about AudioDeviceCmdlets](https://github.com/frgnca/AudioDeviceCmdlets)
+
+---
+
+## 🏗️ Building from Source
+
+Create your own executable using either method:
+
+### PyInstaller (Faster)
 ```bash
 cd src
 python build_app.py
+```
 
+### Nuitka (More Optimized)
+```bash
+cd src
 python build_nuitka.py
+```
+
+Built executables will appear in `src/dist/`
+
+---
+
+## 🎨 About the Hardware Build
+
+The device shown in the gallery was handcrafted with basic tools and materials - no fancy workshop required! It's a testament that functional, effective hardware doesn't need to be professionally manufactured. The beauty of this project is in its functionality and the satisfaction of building something yourself.
+
+**DIY Philosophy:** This project embraces the maker spirit - it's about creating tools that work for YOU, not winning beauty contests. If it controls your volume and makes your workflow better, it's perfect.
+
+---
+
+## 🛠️ Customization & Scalability
+
+DeskMixer is designed to grow with your needs:
+
+### Hardware Scaling
+- **Start small**: 2 sliders and 2 buttons  
+- **Go big**: 16+ sliders and 20+ buttons
+- **Mix it up**: Combine sliders, buttons, rotary encoders, or other inputs
+
+The software automatically adapts to whatever hardware configuration you define in the Arduino firmware!
+
+### Software Flexibility
+- Configure targets per-slider/button
+- Create complex automation chains
+- Save multiple profiles (future feature)
+
+---
+
+## 📝 Keybind Examples
+
+For comprehensive keybind examples and syntax, see [KEYBIND_EXAMPLES.md](KEYBIND_EXAMPLES.md)
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Whether it's:
+- 🐛 Bug reports
+- 💡 Feature suggestions  
+- 📝 Documentation improvements
+- 🔧 Code contributions
+- 📸 Sharing your build
+
+Feel free to open an issue or submit a pull request!
+
+---
+
+## 📄 License
+
+This project is open source. Check the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- Inspired by [Deej](https://github.com/omriharel/deej) by Omri Harel
+- Built with passion for makers and tinkerers everywhere
+- Special thanks to everyone who builds DIY hardware and shares their projects!
+
+---
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/RaduAndre/DeskMixer/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/RaduAndre/DeskMixer/discussions)
+
+---
+
+<div align="center">
+
+**Made with 🎛️ by makers, for makers**
+
+Star ⭐ this repo if you find it useful!
+
+</div>
