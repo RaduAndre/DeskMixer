@@ -410,32 +410,113 @@ class ConfigButtonSection:
     def _browse_app_file(self, app_path_var, app_display_name_var, app_name_label):
         """Open file dialog to select an application"""
         try:
-            # Open file dialog to select executable files
-            file_path = filedialog.askopenfilename(
-                title="Select Application",
-                filetypes=[
-                    ("Executable files", "*.exe"),
-                    ("Application files", "*.app"),
-                    ("All files", "*.*")
-                ]
-            )
+            # Try using Windows shell dialog that preserves .lnk files
+            try:
+                import win32gui
+                import win32con
 
-            if file_path:
-                # Store the full path in the variable
+                print(f"[DEBUG] Using Windows shell dialog")
+
+                # Use Windows file dialog with flag to not dereference links
+                result = win32gui.GetOpenFileNameW(
+                    hwndOwner=0,
+                    Filter='All Files\0*.*\0Shortcuts\0*.lnk\0Executables\0*.exe\0',
+                    Title='Select Application or Shortcut',
+                    Flags=win32con.OFN_FILEMUSTEXIST | win32con.OFN_PATHMUSTEXIST | 0x00100000  # OFN_NODEREFERENCELINKS
+                )
+
+                print(f"[DEBUG] Windows dialog result: {result}")
+
+                # Extract file path
+                if isinstance(result, (tuple, list)):
+                    file_path = result[0] if result else ""
+                else:
+                    file_path = result
+
+                print(f"[DEBUG] Extracted file path: {file_path}")
+
+            except (ImportError, Exception) as e:
+                print(f"[DEBUG] Windows shell dialog failed: {e}, falling back to tkinter")
+                # Fallback to tkinter dialog
+                file_path = filedialog.askopenfilename(
+                    title="Select Application or Shortcut",
+                    filetypes=[
+                        ("All files", "*.*"),
+                        ("Shortcuts", "*.lnk"),
+                        ("Executable files", "*.exe"),
+                        ("Application files", "*.app")
+                    ]
+                )
+
+            print(f"[DEBUG] Selected file: {file_path}")
+
+            if not file_path:
+                print(f"[DEBUG] No file selected, returning False")
+                return False
+
+            print(f"[DEBUG] File extension: {os.path.splitext(file_path)[1]}")
+            print(f"[DEBUG] File exists: {os.path.exists(file_path)}")
+
+            # Check if it's a shortcut and extract target + arguments
+            if file_path.lower().endswith('.lnk'):
+                print(f"[DEBUG] Processing .lnk shortcut")
+                try:
+                    import win32com.client
+
+                    shell = win32com.client.Dispatch("WScript.Shell")
+                    shortcut = shell.CreateShortCut(file_path)
+
+                    target_path = shortcut.Targetpath
+                    arguments = shortcut.Arguments
+
+                    print(f"[DEBUG] Shortcut target: {target_path}")
+                    print(f"[DEBUG] Shortcut arguments: '{arguments}'")
+
+                    if target_path:
+                        # Combine target + arguments
+                        if arguments and arguments.strip():
+                            full_command = f'"{target_path}" {arguments}'
+                        else:
+                            full_command = target_path
+
+                        print(f"[DEBUG] Full command: {full_command}")
+                        app_path_var.set(full_command)
+                    else:
+                        print(f"[DEBUG] No target found, using shortcut path")
+                        app_path_var.set(file_path)
+
+                    # Get shortcut name (without .lnk)
+                    app_name = os.path.basename(file_path)[:-4]
+
+                except Exception as e:
+                    print(f"[DEBUG] Error extracting shortcut info: {e}")
+                    # Fallback to using the shortcut path as-is
+                    app_path_var.set(file_path)
+                    app_name = os.path.basename(file_path)[:-4]
+            else:
+                print(f"[DEBUG] Regular file")
+                # Regular file - store the path
                 app_path_var.set(file_path)
-
-                # Get the exact file name as written (with extension)
                 app_name = os.path.basename(file_path)
 
-                # Store the display name in the variable
-                app_display_name_var.set(app_name)
+            print(f"[DEBUG] app_path_var set to: {app_path_var.get()}")
+            print(f"[DEBUG] Display name: {app_name}")
 
-                # Update the label with the app name
-                app_name_label.config(text=app_name)
+            # Store the display name
+            app_display_name_var.set(app_name)
+            print(f"[DEBUG] app_display_name_var set to: {app_display_name_var.get()}")
 
-                return True
-            return False
+            # Update the label
+            app_name_label.config(text=app_name)
+            print(f"[DEBUG] Label updated to: {app_name}")
+            print(f"[DEBUG] File processing SUCCESS")
+
+            return True
+
         except Exception as e:
+            print(f"[DEBUG] Top-level exception: {type(e).__name__}: {str(e)}")
+            import traceback
+            print(f"[DEBUG] Traceback:\n{traceback.format_exc()}")
             log_error(e, "Error browsing for app file")
             messagebox.showerror("Error", f"Could not select application: {str(e)}")
             return False
@@ -553,20 +634,20 @@ class ConfigButtonSection:
 
             # Variables for app selection
             app_path_var = tk.StringVar()
-            app_display_name_var = tk.StringVar()  # New variable for display name
+            app_display_name_var = tk.StringVar()
 
             if app_path and isinstance(app_path, str):
                 app_path_var.set(app_path)
-                # Use the stored display name if available, otherwise use the file name
                 if app_display_name:
                     display_text = app_display_name
                 else:
                     display_text = os.path.basename(app_path)
                 app_display_name_var.set(display_text)
             else:
-                display_text = "Select App"
+                display_text = "Click to select app"
                 app_display_name_var.set("")
 
+            # Clickable label that opens file dialog
             app_name_label = tk.Label(
                 dynamic_frame,
                 text=display_text,
@@ -576,18 +657,7 @@ class ConfigButtonSection:
                 relief="sunken",
                 padx=5,
                 pady=2,
-                width=20
-            )
-
-            browse_button = tk.Button(
-                dynamic_frame,
-                text="📁",
-                bg="#404040",
-                fg="white",
-                font=("Arial", 9),
-                relief="raised",
-                padx=5,
-                pady=2,
+                width=25,
                 cursor="hand2"
             )
 
@@ -643,6 +713,13 @@ class ConfigButtonSection:
             keybind_entry.bind('<FocusOut>', auto_save_wrapper)
             output_mode_combo.bind('<<ComboboxSelected>>', auto_save_wrapper)
 
+            # Bind click to open file dialog and auto-save
+            def on_app_click(e):
+                if self._browse_app_file(app_path_var, app_display_name_var, app_name_label):
+                    auto_save_wrapper()
+
+            app_name_label.bind('<Button-1>', on_app_click)
+
             # Show/hide elements based on action
             def on_action_change(event=None):
                 for widget in dynamic_frame.winfo_children():
@@ -659,16 +736,9 @@ class ConfigButtonSection:
                 elif action_name == "launch_app":
                     app_path_label.pack(side="left", padx=2)
                     app_name_label.pack(side="left", padx=2)
-                    browse_button.pack(side="left", padx=2)
-
-                    # Set up browse button command
-                    browse_button.config(
-                        command=lambda: self._browse_app_file(app_path_var, app_display_name_var, app_name_label)
-                    )
                 elif action_name == "switch_audio_output":
                     output_label.pack(side="left", padx=2)
                     output_mode_combo.pack(side="left", padx=2)
-                    # Note: Refresh button removed - devices refresh automatically on click
 
             # BIND AUTO-SAVE TO ACTION COMBO AND CALL on_action_change
             action_combo.bind('<<ComboboxSelected>>',
