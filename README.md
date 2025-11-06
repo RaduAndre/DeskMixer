@@ -14,6 +14,15 @@ A physical volume mixer with programmable buttons for Windows, inspired by [Deej
 
 ---
 
+## 🚀 Get Started 
+
+**For Windows users, the simplest way to get up and running is with the pre-compiled executable!**
+
+1.  **Download:** Go to the [**Releases Page**](/RaduAndre/DeskMixer/releases) and download the latest `DeskMixer.exe` file. (no instalation needed)
+2. **Configure:** Follow the steps in the [Configuration](#-configuration) section to bind your sliders and program your buttons!
+
+---
+
 ## 📸 Gallery
 
 ### Software Interface
@@ -27,6 +36,8 @@ A physical volume mixer with programmable buttons for Windows, inspired by [Deej
 ---
 
 ## ✨ Features
+
+DeskMixer takes physical volume control and supercharges it with macro-like button actions.
 
 ### Volume Control
 - 🎛️ **Physical Sliders**: Control individual application volumes with real hardware sliders
@@ -83,6 +94,16 @@ The software supports multiple volume control modes:
 - 🔀 **Switch Audio Output**: Switch between available audio output devices*
 
 *Requires [AudioDeviceCmdlets](https://github.com/frgnca/AudioDeviceCmdlets) PowerShell module
+>Installation Instructions:
+<br>1. Open PowerShell as Administrator
+<br>2. (Right-click Start → Windows PowerShell (Admin))
+<br>3. Run this command:
+```bash
+Install-Module -Name AudioDeviceCmdlets -Force
+```
+>4.If prompted about repository trust, type 'Y' and press Enter
+<br>5. Wait for installation to complete
+<br>6. Restart this application
 
 ### Advanced Actions
 - ⌨️ **Custom Keybind**: Execute any keyboard shortcut (see [KEYBIND_EXAMPLES.md](KEYBIND_EXAMPLES.md))
@@ -330,6 +351,6 @@ This project is open source. Check the [LICENSE](LICENSE) file for details.
 
 **Made with 🎛️ by makers, for makers**
 
-Star ⭐ this repo if you find it useful!
+Star ⭐ this repo if you find it useful! You can also support further development [buying me a Coffe ☕](https://ko-fi.com/andreiradu).
 
 </div>
