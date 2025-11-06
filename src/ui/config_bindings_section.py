@@ -413,6 +413,10 @@ class ConfigBindingsSection:
             # Get available targets
             targets = self.helpers.get_available_targets()
 
+            # Add "Select another app..." option at the end
+            targets.append("─────────────────────")
+            targets.append("🔍 Select another app...")
+
             # Combobox (editable to allow custom app names)
             combo = ttk.Combobox(
                 selector_frame,
@@ -435,31 +439,112 @@ class ConfigBindingsSection:
                 if separator_idx > 0:
                     targets.insert(separator_idx + 1, display_name)
                 else:
-                    targets.append(display_name)
+                    # Insert before the last separator and browse option
+                    targets.insert(-2, display_name)
                 combo['values'] = targets
 
             combo.set(display_name if display_name else "❌ None")
+
+            # Function to handle file browsing
+            def on_browse_file():
+                """Open file dialog to select an executable"""
+                try:
+                    from tkinter import filedialog
+                    import os
+
+                    # Open file dialog
+                    file_path = filedialog.askopenfilename(
+                        title="Select Application",
+                        filetypes=[
+                            ("Executable files", "*.exe"),
+                            ("All files", "*.*")
+                        ],
+                        initialdir=os.path.expandvars(r"%ProgramFiles%")
+                    )
+
+                    if file_path:
+                        # Extract just the executable name (e.g., "chrome.exe")
+                        exe_name = os.path.basename(file_path)
+
+                        # Update the combobox with the exe name
+                        current_targets = list(combo['values'])
+
+                        # Find the separator before "Select another app..."
+                        separator_idx = -1
+                        for idx, target in enumerate(current_targets):
+                            if target.startswith("─") and idx < len(current_targets) - 1:
+                                if "Select another app" in current_targets[idx + 1]:
+                                    separator_idx = idx
+                                    break
+
+                        # Add the new app if not already in list
+                        if exe_name not in current_targets:
+                            if separator_idx > 0:
+                                current_targets.insert(separator_idx + 1, exe_name)
+                            else:
+                                current_targets.insert(-2, exe_name)
+                            combo['values'] = current_targets
+
+                        # Set the selected value
+                        combo.set(exe_name)
+
+                        # Clear selection and remove focus to prevent text highlighting
+                        combo.selection_clear()
+                        combo.icursor(tk.END)  # Move cursor to end
+
+                        # Remove focus from combobox
+                        self.bindings_container.focus_set()
+
+                        # Trigger auto-save
+                        self._auto_save_binding(row_frame)
+
+                except Exception as e:
+                    log_error(e, "Error browsing for file")
+                    messagebox.showerror("Error", f"Failed to select file: {str(e)}")
+
+            # Function to handle selection change
+            def on_combo_select(event):
+                """Handle combobox selection"""
+                selected = combo.get()
+                if selected == "🔍 Select another app...":
+                    # Reset to previous value temporarily
+                    combo.set(display_name if display_name else "❌ None")
+                    # Open file browser
+                    on_browse_file()
+                else:
+                    # Normal selection - trigger auto-save
+                    self._auto_save_binding(row_frame)
 
             # Auto-refresh function when dropdown is opened
             def on_dropdown_open(event):
                 """Refresh the app list when dropdown is clicked"""
                 try:
                     current_value = combo.get()
+
+                    # Don't refresh if "Select another app..." is selected
+                    if current_value == "🔍 Select another app...":
+                        return
+
                     updated_targets = self.helpers.get_available_targets()
+
+                    # Add separators and browse option
+                    updated_targets.append("─────────────────────")
+                    updated_targets.append("🔍 Select another app...")
 
                     # Add current value to targets if not present
                     if current_value and current_value not in updated_targets:
-                        # Find separator
+                        # Find separator before browse option
                         separator_idx = -1
                         for idx, target in enumerate(updated_targets):
-                            if target.startswith("─"):
-                                separator_idx = idx
-                                break
+                            if target.startswith("─") and idx < len(updated_targets) - 1:
+                                if "Select another app" in updated_targets[idx + 1]:
+                                    separator_idx = idx
+                                    break
 
                         if separator_idx > 0:
                             updated_targets.insert(separator_idx + 1, current_value)
                         else:
-                            updated_targets.append(current_value)
+                            updated_targets.insert(-2, current_value)
 
                     combo['values'] = updated_targets
                     # Keep the current selection
@@ -514,8 +599,7 @@ class ConfigBindingsSection:
             self._update_minus_button_visibility(row_frame)
 
             # Bind events for auto-save
-            combo.bind('<<ComboboxSelected>>',
-                       lambda e: self._auto_save_binding(row_frame))
+            combo.bind('<<ComboboxSelected>>', on_combo_select)
             combo.bind('<FocusOut>',
                        lambda e: self._auto_save_binding(row_frame))
             combo.bind('<Return>',
