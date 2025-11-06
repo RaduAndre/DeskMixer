@@ -353,7 +353,7 @@ class ConfigButtonSection:
         self._run_async(refresh())
 
     def _auto_save_button_binding(self, button_name, action_combo, target_combo,
-                                  keybind_entry, app_path_var, app_display_name_var, output_mode_combo,
+                                  keybind_var, app_path_var, app_display_name_var, output_mode_combo,
                                   output_device_combo):
         """Automatically save button binding when changes occur."""
         try:
@@ -367,8 +367,19 @@ class ConfigButtonSection:
                 target = self.helpers.normalize_target_name(target_combo.get().strip())
 
             keybind = None
-            if action == "keybind" and keybind_entry.winfo_ismapped():
-                keybind = keybind_entry.get().strip()
+            if action == "keybind":
+                keybind_value = keybind_var.get().strip()
+
+                # Clean the keybind value thoroughly
+                if keybind_value:
+                    # Remove mic emoji
+                    keybind_value = keybind_value.replace("🎙️", "").strip()
+
+                    # Filter out recording messages and empty values
+                    if keybind_value and \
+                            "Recording" not in keybind_value and \
+                            "ESC to cancel" not in keybind_value:
+                        keybind = keybind_value
 
             app_path = None
             app_display_name = None
@@ -393,7 +404,7 @@ class ConfigButtonSection:
                 'target': target if target and target != "None" else None,
                 'keybind': keybind if keybind else None,
                 'app_path': app_path if app_path else None,
-                'app_display_name': app_display_name if app_display_name else None,  # Save display name
+                'app_display_name': app_display_name if app_display_name else None,
                 'output_mode': output_mode if output_mode else None,
                 'output_device': output_device if output_device else None
             }
@@ -619,9 +630,29 @@ class ConfigButtonSection:
                 font=("Arial", 9)
             )
 
-            keybind_entry = tk.Entry(dynamic_frame, width=15, font=("Arial", 9))
+            keybind_var = tk.StringVar()
+            keybind_entry = tk.Entry(
+                dynamic_frame,
+                textvariable=keybind_var,
+                width=15,
+                font=("Arial", 9)
+            )
             if keybind and isinstance(keybind, str):
-                keybind_entry.insert(0, keybind)
+                keybind_var.set(keybind)
+
+            # Record button for keybind
+            keybind_record_btn = tk.Button(
+                dynamic_frame,
+                text="🎤 Record",
+                command=lambda: self._record_keybind(keybind_entry, keybind_var, auto_save_wrapper),
+                bg="#404040",
+                fg="white",
+                font=("Arial", 8),
+                relief="flat",
+                padx=5,
+                pady=2,
+                cursor="hand2"
+            )
 
             # App path selection (shown when action is launch_app)
             app_path_label = tk.Label(
@@ -706,12 +737,14 @@ class ConfigButtonSection:
             def auto_save_wrapper(e=None):
                 return self._auto_save_button_binding(
                     button_name, action_combo, target_combo,
-                    keybind_entry, app_path_var, app_display_name_var, output_mode_combo, output_mode_combo
+                    keybind_var, app_path_var, app_display_name_var, output_mode_combo, output_mode_combo
                 )
 
             target_combo.bind('<<ComboboxSelected>>', auto_save_wrapper)
-            keybind_entry.bind('<FocusOut>', auto_save_wrapper)
+            keybind_entry.bind('<FocusOut>', auto_save_wrapper)  # Auto-save when user types manually
+            keybind_entry.bind('<Return>', auto_save_wrapper)  # Auto-save on Enter key
             output_mode_combo.bind('<<ComboboxSelected>>', auto_save_wrapper)
+
 
             # Bind click to open file dialog and auto-save
             def on_app_click(e):
@@ -730,6 +763,7 @@ class ConfigButtonSection:
                 if action_name == "keybind":
                     keybind_label.pack(side="left", padx=2)
                     keybind_entry.pack(side="left", padx=2)
+                    keybind_record_btn.pack(side="left", padx=2)
                 elif action_name == "mute":
                     target_label.pack(side="left", padx=2)
                     target_combo.pack(side="left", padx=2)
@@ -758,7 +792,7 @@ class ConfigButtonSection:
                 command=lambda: self._test_button_action(
                     self.helpers.normalize_action_name(action_var.get()),
                     self.helpers.normalize_target_name(target_var.get()) if target_var.get() else "",
-                    keybind_entry.get(),
+                    keybind_var.get(),  # Changed from keybind_entry.get()
                     app_path_var.get() if app_path_var else "",
                     output_var.get()
                 ),
@@ -790,6 +824,159 @@ class ConfigButtonSection:
         except Exception as e:
             log_error(e, "Error adding button binding row")
 
+    def _record_keybind(self, entry_widget, keybind_var, auto_save_callback):
+        """Record keypresses for keybind configuration"""
+        try:
+            # Check if keyboard module is available
+            try:
+                import keyboard
+            except ImportError:
+                messagebox.showerror(
+                    "Module Missing",
+                    "The 'keyboard' module is required for keybind recording.\n\n"
+                    "Install it with: pip install keyboard"
+                )
+                return
+
+            # Store original values
+            original_value = keybind_var.get()
+            original_bg = entry_widget.cget('background')
+            original_state = entry_widget.cget('state')
+
+            # Visual feedback - recording mode
+            entry_widget.configure(background="#4a4a00", state="readonly")
+            keybind_var.set("🎙️ Recording... (ESC to cancel)")
+
+            recorded_keys = []
+            is_recording = True
+            recording_complete = False
+
+            def on_key_event(event):
+                nonlocal is_recording, recorded_keys, recording_complete
+
+                if not is_recording or recording_complete:
+                    return
+
+                key_name = event.name
+
+                # Handle escape to cancel
+                if key_name == 'esc':
+                    is_recording = False
+                    recording_complete = True
+                    keybind_var.set(original_value)
+                    entry_widget.configure(background=original_bg, state=original_state)
+                    keyboard.unhook_all()
+                    return
+
+                # Normalize key names for better display and compatibility
+                key_map = {
+                    'ctrl': 'ctrl',
+                    'control': 'ctrl',
+                    'shift': 'shift',
+                    'alt': 'alt',
+                    'win': 'win',
+                    'windows': 'win',
+                    'cmd': 'cmd',
+                    'command': 'cmd',
+                    'space': 'space',
+                    'enter': 'enter',
+                    'return': 'enter',
+                    'tab': 'tab',
+                    'backspace': 'backspace',
+                    'delete': 'delete',
+                    'del': 'delete',
+                    'up': 'up',
+                    'down': 'down',
+                    'left': 'left',
+                    'right': 'right',
+                    'page up': 'page up',
+                    'page down': 'page down',
+                    'home': 'home',
+                    'end': 'end',
+                    'insert': 'insert',
+                }
+
+                normalized_key = key_map.get(key_name.lower(), key_name.lower())
+
+                # Add key if not already in list (avoid duplicates from hold)
+                if normalized_key not in recorded_keys:
+                    recorded_keys.append(normalized_key)
+
+                # Display current combination with recording indicator
+                display_text = '+'.join(recorded_keys)
+                keybind_var.set(f"🎙️ {display_text}")
+
+            def on_key_release(event):
+                nonlocal is_recording, recording_complete
+
+                if not is_recording or recording_complete:
+                    return
+
+                # Stop recording after a short delay when all keys are released
+                entry_widget.after(400, finalize_recording)
+
+            def finalize_recording():
+                nonlocal is_recording, recording_complete
+
+                if not is_recording or recording_complete:
+                    return
+
+                # Check if any keys are still pressed
+                try:
+                    if keyboard.is_pressed('ctrl') or keyboard.is_pressed('shift') or \
+                            keyboard.is_pressed('alt') or keyboard.is_pressed('win'):
+                        return  # Wait for all modifier keys to be released
+                except:
+                    pass  # Continue if check fails
+
+                is_recording = False
+                recording_complete = True
+                keyboard.unhook_all()
+
+                # Restore state
+                entry_widget.configure(background=original_bg, state=original_state)
+
+                # Save the recorded keybind
+                if recorded_keys and recorded_keys != ['esc']:
+                    final_keybind = '+'.join(recorded_keys)
+                    keybind_var.set(final_keybind)
+
+                    # Trigger auto-save after a short delay
+                    entry_widget.after(200, auto_save_callback)
+                else:
+                    keybind_var.set(original_value)
+
+            # Hook keyboard events
+            keyboard.on_press(on_key_event)
+            keyboard.on_release(on_key_release)
+
+            # Safety timeout - stop recording after 10 seconds
+            def safety_timeout():
+                nonlocal is_recording, recording_complete
+                if is_recording and not recording_complete:
+                    is_recording = False
+                    recording_complete = True
+                    keyboard.unhook_all()
+                    entry_widget.configure(background=original_bg, state=original_state)
+                    if recorded_keys:
+                        final_keybind = '+'.join(recorded_keys)
+                        keybind_var.set(final_keybind)
+                        entry_widget.after(200, auto_save_callback)
+                    else:
+                        keybind_var.set(original_value)
+
+            entry_widget.after(10000, safety_timeout)
+
+        except Exception as e:
+            log_error(e, "Error recording keybind")
+            messagebox.showerror("Error", f"Failed to record keybind: {str(e)}")
+            # Restore state on error
+            try:
+                entry_widget.configure(background=original_bg, state=original_state)
+                keybind_var.set(original_value)
+            except:
+                pass
+
     def _test_button_action(self, action, target, keybind, app_path, output_selection):
         """Test a button action (handles async actions properly)"""
         try:
@@ -801,7 +988,17 @@ class ConfigButtonSection:
             if action == "mute" and target:
                 kwargs['target'] = target
             elif action == "keybind" and keybind:
-                kwargs['keys'] = keybind
+                # Clean the keybind value - remove mic emoji if present
+                clean_keybind = keybind.strip()
+                if clean_keybind.startswith("🎙️"):
+                    clean_keybind = clean_keybind.replace("🎙️", "").strip()
+
+                # Don't test if it's still a recording message
+                if not clean_keybind or "Recording" in clean_keybind or "ESC to cancel" in clean_keybind:
+                    messagebox.showwarning("Test", "Please finish recording or enter a keybind first")
+                    return
+
+                kwargs['keys'] = clean_keybind
             elif action == "launch_app" and app_path:
                 kwargs['app_path'] = app_path
             elif action == "switch_audio_output":

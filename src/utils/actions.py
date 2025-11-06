@@ -461,12 +461,32 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             import keyboard
 
             if isinstance(keys, str):
-                keyboard.press_and_release(keys)
+                # Clean the keys string - remove any emojis or special characters
+                clean_keys = keys.strip()
+
+                # Remove mic emoji if somehow it made it here
+                if "🎙️" in clean_keys:
+                    clean_keys = clean_keys.replace("🎙️", "").strip()
+
+                # Don't execute if it's a recording message or empty
+                if not clean_keys or "Recording" in clean_keys or "ESC to cancel" in clean_keys:
+                    log_error(
+                        ValueError("Invalid keybind value"),
+                        f"Cannot execute keybind: {keys}"
+                    )
+                    return False
+
+                keyboard.press_and_release(clean_keys)
                 return True
             elif isinstance(keys, list):
                 for key in keys:
-                    keyboard.press_and_release(key)
-                    time.sleep(0.05)
+                    clean_key = key.strip()
+                    if "🎙️" in clean_key:
+                        clean_key = clean_key.replace("🎙️", "").strip()
+
+                    if clean_key and "Recording" not in clean_key:
+                        keyboard.press_and_release(clean_key)
+                        time.sleep(0.05)
                 return True
             else:
                 return False
