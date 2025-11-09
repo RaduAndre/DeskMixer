@@ -61,9 +61,9 @@ def run_nuitka_build():
     ICON_PATH = os.path.join(src_dir, "icons", "logo.ico")
 
     # Output directories
-    DIST_DIR = os.path.join(script_dir, "dist")
-    OUTPUT_DIR = DIST_DIR  # exe will be in src/build/dist/
-    BUILD_CACHE_DIR = os.path.join(DIST_DIR, "build_files")  # build files in src/build/dist/build_files/
+    BUILD_DIR = os.path.join(script_dir, "build_files")
+    OUTPUT_DIR = BUILD_DIR  # exe will be in src/build/dist/
+    BUILD_CACHE_DIR = BUILD_DIR  # build files in src/build/dist/build_files/
 
     print(f"Script directory: {script_dir}")
     print(f"Source directory: {src_dir}")
@@ -137,6 +137,7 @@ def run_nuitka_build():
     COMMAND = NUITKA_COMMAND_BASE + [
         # Basic compilation options
         "--onefile",
+        #"--standalone",
         "--msvc=latest",  # Instruct Nuitka to use the latest installed MSVC
         "--enable-plugin=tk-inter",
 

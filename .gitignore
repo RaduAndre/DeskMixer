@@ -25,4 +25,4 @@ Python bytecode/cache directories
 PyInstaller/Nuika/spec files (used for creating executables)
 
 src/build/build_files
-
+src/build/dist
