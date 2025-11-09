@@ -7,8 +7,8 @@ import atexit
 AUDIO_AVAILABLE = True
 try:
     from ctypes import cast, POINTER
-    from comtypes import CLSCTX_ALL, CoUninitialize
-    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume, ISimpleAudioVolume
+    from comtypes import CoUninitialize, CLSCTX_ALL
+    from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume, IAudioEndpointVolume
 except Exception as _e:
     AUDIO_AVAILABLE = False
     log_error(_e, "Audio libraries (comtypes/pycaw) not available - running in degraded mode")
@@ -92,23 +92,26 @@ class AudioManager:
         """Initialize audio devices with error handling"""
 
         def init_operation():
-            # Master volume
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-            self.master_volume = cast(interface, POINTER(IAudioEndpointVolume))
+            # Master volume - NEW API: Direct access via EndpointVolume property
+            speakers = AudioUtilities.GetSpeakers()
+            self.master_volume = speakers.EndpointVolume
 
             # Store current device ID for change detection
             try:
-                self.current_device_id = devices.GetId()
+                # NEW API: Use .id property instead of .GetId() method
+                self.current_device_id = speakers.id
             except Exception as e:
                 log_error(e, "Could not get device ID")
                 self.current_device_id = None
 
-            # Microphone
+            # Microphone - OLD API required (GetMicrophone returns raw IMMDevice pointer)
             try:
-                mic_devices = AudioUtilities.GetMicrophone()
-                mic_interface = mic_devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-                self.mic_volume = cast(mic_interface, POINTER(IAudioEndpointVolume))
+                mic_device = AudioUtilities.GetMicrophone()
+                if mic_device:
+                    mic_interface = mic_device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                    self.mic_volume = cast(mic_interface, POINTER(IAudioEndpointVolume))
+                else:
+                    self.mic_volume = None
             except Exception as e:
                 log_error(e, "Microphone not available")
                 self.mic_volume = None
@@ -144,7 +147,8 @@ class AudioManager:
                 def check_device_operation():
                     # Get current default device
                     devices = AudioUtilities.GetSpeakers()
-                    new_device_id = devices.GetId()
+                    # NEW API: Use .id property instead of .GetId() method
+                    new_device_id = devices.id
                     return new_device_id
 
                 new_device_id = self._safe_com_operation(
@@ -181,23 +185,26 @@ class AudioManager:
             print("Refreshing audio devices...")
 
             def refresh_operation():
-                # Re-initialize master volume with new device
-                devices = AudioUtilities.GetSpeakers()
-                interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-                self.master_volume = cast(interface, POINTER(IAudioEndpointVolume))
+                # Re-initialize master volume with new device - NEW API
+                speakers = AudioUtilities.GetSpeakers()
+                self.master_volume = speakers.EndpointVolume
 
                 # Update device ID
                 try:
-                    self.current_device_id = devices.GetId()
+                    # NEW API: Use .id property instead of .GetId() method
+                    self.current_device_id = speakers.id
                 except Exception as e:
                     log_error(e, "Could not get device ID during refresh")
                     self.current_device_id = None
 
-                # Re-initialize microphone
+                # Re-initialize microphone - OLD API required
                 try:
-                    mic_devices = AudioUtilities.GetMicrophone()
-                    mic_interface = mic_devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-                    self.mic_volume = cast(mic_interface, POINTER(IAudioEndpointVolume))
+                    mic_device = AudioUtilities.GetMicrophone()
+                    if mic_device:
+                        mic_interface = mic_device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                        self.mic_volume = cast(mic_interface, POINTER(IAudioEndpointVolume))
+                    else:
+                        self.mic_volume = None
                 except Exception as e:
                     log_error(e, "Microphone not available during refresh")
                     self.mic_volume = None
@@ -849,6 +856,7 @@ class AudioManager:
                 return 0.5
 
             def get_volume_operation():
+                # NEW API: Direct method call on EndpointVolume
                 return self.master_volume.GetMasterVolumeLevelScalar()
 
             volume = self._safe_com_operation(
@@ -883,6 +891,7 @@ class AudioManager:
             adjusted_level = self._apply_volume_curve(level, mode)
 
             def set_volume_operation():
+                # NEW API: Direct method call on EndpointVolume
                 self.master_volume.SetMasterVolumeLevelScalar(adjusted_level, None)
                 return True
 
@@ -915,6 +924,7 @@ class AudioManager:
                 return 0.5
 
             def get_volume_operation():
+                # NEW API: Direct method call on EndpointVolume
                 return self.mic_volume.GetMasterVolumeLevelScalar()
 
             volume = self._safe_com_operation(
@@ -938,6 +948,7 @@ class AudioManager:
             adjusted_level = self._apply_volume_curve(level, mode)
 
             def set_volume_operation():
+                # NEW API: Direct method call on EndpointVolume
                 self.mic_volume.SetMasterVolumeLevelScalar(adjusted_level, None)
                 return True
 

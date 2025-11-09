@@ -1,8 +1,6 @@
 # ui/config_button_section.py
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-import asyncio
-import threading
 import os
 from utils.error_handler import log_error
 
@@ -20,10 +18,6 @@ class ConfigButtonSection:
 
         self.button_canvas = None
         self.button_container = None
-
-        # Setup event loop for async operations
-        self._setup_async_loop()
-
         self._create_ui(parent_frame)
 
         # Register for configuration updates if serial_handler is provided
@@ -135,30 +129,6 @@ class ConfigButtonSection:
         except Exception as e:
             log_error(e, "Error synchronizing button bindings")
 
-    def _setup_async_loop(self):
-        """Setup asyncio event loop for async operations"""
-        try:
-            # Try to get existing event loop
-            self.loop = asyncio.get_event_loop()
-        except RuntimeError:
-            # Create new event loop if none exists
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
-
-    def _run_async(self, coro):
-        """Run an async coroutine in a thread-safe manner"""
-
-        def run_in_thread():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(coro)
-                loop.close()
-            except Exception as e:
-                log_error(e, "Error running async operation")
-
-        thread = threading.Thread(target=run_in_thread, daemon=True)
-        thread.start()
 
     def _create_ui(self, parent):
         """Create button bindings section"""
@@ -306,51 +276,27 @@ class ConfigButtonSection:
     def _get_audio_output_devices(self):
         """Get available audio output device names"""
         try:
-            from utils.output_switch import get_device_names
+            from audio.output_switch import get_device_names
             return get_device_names()
         except Exception as e:
             log_error(e, "Error getting audio devices")
             return []
 
-    async def _get_audio_output_devices_async(self):
-        """Get available audio output device names asynchronously"""
-        try:
-            from utils.output_switch import get_device_names
-            # Run in executor to avoid blocking
-            loop = asyncio.get_event_loop()
-            from concurrent.futures import ThreadPoolExecutor
-            executor = ThreadPoolExecutor(max_workers=1)
-            devices = await loop.run_in_executor(executor, get_device_names)
-            return devices
-        except Exception as e:
-            log_error(e, "Error getting audio devices")
-            return []
-
     def _refresh_audio_devices_dropdown(self, output_mode_combo):
-        """Refresh audio device list in dropdown when clicked (async, non-blocking)"""
+        """Refresh audio device list in dropdown when clicked"""
+        try:
+            devices = self._get_audio_output_devices()
+            output_options = ["Cycle Through"] + devices
 
-        async def refresh():
-            try:
-                devices = await self._get_audio_output_devices_async()
-                output_options = ["Cycle Through"] + devices
+            # Update dropdown
+            current = output_mode_combo.get()
+            output_mode_combo['values'] = output_options
 
-                # Update UI in main thread
-                def update_ui():
-                    try:
-                        current = output_mode_combo.get()
-                        output_mode_combo['values'] = output_options
-                        # Keep current selection if still valid
-                        if current not in output_options and current != "Cycle Through":
-                            output_mode_combo.set("Cycle Through")
-                    except Exception as e:
-                        log_error(e, "Error updating device list UI")
-
-                # Schedule UI update in main thread
-                output_mode_combo.after(0, update_ui)
-            except Exception as e:
-                log_error(e, "Error refreshing audio devices")
-
-        self._run_async(refresh())
+            # Keep current selection if still valid
+            if current not in output_options and current != "Cycle Through":
+                output_mode_combo.set("Cycle Through")
+        except Exception as e:
+            log_error(e, "Error refreshing audio devices")
 
     def _auto_save_button_binding(self, button_name, action_combo, target_combo,
                                   keybind_var, app_path_var, app_display_name_var, output_mode_combo,

@@ -3,7 +3,7 @@ pillow>=10.0.0
 pystray>=0.19.0
 
 # Audio Control
-pycaw==20240210
+pycaw==20251023
 comtypes>=1.2.0
 
 

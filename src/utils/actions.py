@@ -417,30 +417,30 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
                 self._show_audio_cmdlets_install_dialog()
                 return False
 
-            from utils.output_switch import (
+            from audio.output_switch import (
                 cycle_audio_device,
                 set_audio_device,
-                get_audio_devices
+                get_device_names
             )
 
             if output_mode == "cycle":
                 return cycle_audio_device()
+
             elif output_mode == "select" and device_name:
-                devices = get_audio_devices()
-                if not devices:
+                # Verify device exists by checking available names
+                available_names = get_device_names()
+
+                if not available_names:
                     log_error(ValueError("No audio devices found"), "Cannot switch audio output")
                     return False
 
-                # Find device by name
-                system = platform.system()
+                if device_name not in available_names:
+                    log_error(ValueError(f"Device not found: {device_name}"), "Cannot switch audio output")
+                    return False
 
-                for device in devices:
-                    device_display_name = device.get('Name' if system == "Windows" else 'name', '')
-                    if device_display_name == device_name:
-                        return set_audio_device(device)
+                # Set device by name (the new API handles this directly)
+                return set_audio_device(device_name)
 
-                log_error(ValueError(f"Device not found: {device_name}"), "Cannot switch audio output")
-                return False
             else:
                 return False
 
