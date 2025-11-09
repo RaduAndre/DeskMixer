@@ -93,18 +93,6 @@ The software supports multiple volume control modes:
 - 🔇 **Mute**: Toggle mute for system, microphone, or specific application
 - 🔀 **Switch Audio Output**: Switch between available audio output devices*
 
-*Requires [AudioDeviceCmdlets](https://github.com/frgnca/AudioDeviceCmdlets) PowerShell module
->Installation Instructions:
-<br>1. Open PowerShell as Administrator
-<br>2. (Right-click Start → Windows PowerShell (Admin))
-<br>3. Run this command:
-```bash
-Install-Module -Name AudioDeviceCmdlets -Force
-```
->4.If prompted about repository trust, type 'Y' and press Enter
-<br>5. Wait for installation to complete
-<br>6. Restart this application
-
 ### Advanced Actions
 - ⌨️ **Custom Keybind**: Execute any keyboard shortcut (see [KEYBIND_EXAMPLES.md](KEYBIND_EXAMPLES.md))
 - 🚀 **Launch App**: Start or focus specific applications
@@ -152,30 +140,10 @@ Want more controls? Simply:
 
 ### Option 1: Pre-built Executable (Easiest)
 
-1. Download `DeskMixer.exe` from the [Releases](https://github.com/RaduAndre/DeskMixer/releases) page or from [src/dist/](src/dist/)
+1. Download `DeskMixer.exe` from the [Releases](https://github.com/RaduAndre/DeskMixer/releases) page.
 2. Run the executable
 
-## ⚠️ Antivirus False Positives
 
-Some antivirus software may flag DeskMixer as suspicious. This is a **false positive** caused by:
-
-1. **Keyboard automation** - Used for custom keybinds
-2. **Audio control** - Accessing Windows audio APIs
-3. **Serial communication** - Communicating with Arduino
-4. **Unsigned executable** - No code signing certificate yet
-
-### ✅ This software is safe:
-- 🔓 **100% open source** - Review all code on GitHub
-- 🛠️ **Build it yourself** - Instructions included
-- 📝 **No network activity** - No data collection or transmission
-- 🔍 **VirusTotal scan available** - See all detection engines
-
-### If your antivirus blocks it:
-1. Add an exception for DeskMixer.exe
-2. Build from source yourself using the included scripts
-3. Run from Python directly (see Installation)
-
-**I'm working on code signing to eliminate false positives.**
 
 ### Option 2: Run from Source
 
