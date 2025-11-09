@@ -1,21 +1,25 @@
-# ui/config_helpers.py
-from tkinter import ttk, messagebox
+"""UI Helper functions for configuration"""
 from utils.error_handler import log_error
 
 
-class ConfigHelpers:
-    """Utility methods for ConfigTab and its sections."""
+class UIHelpers:
+    """Utility methods for UI configuration"""
 
     def __init__(self, audio_manager, config_manager):
+        """
+        Initialize UI helpers
+
+        Args:
+            audio_manager: Audio manager instance
+            config_manager: Config manager instance
+        """
         self.audio_manager = audio_manager
         self.config_manager = config_manager
-    
+
     def get_available_actions(self):
         """Get list of available actions"""
         return [
             "⏯️ Play/Pause",
- #           "▶️ Play",
- #           "⏸️ Pause",
             "⏭️ Next Track",
             "⏮️ Previous Track",
             "⏩ Seek Forward",
@@ -29,11 +33,17 @@ class ConfigHelpers:
         ]
 
     def normalize_action_name(self, display_name):
-        """Convert display name to internal action name"""
+        """
+        Convert display name to internal action name
+
+        Args:
+            display_name: Display name (e.g., "⏯️ Play/Pause")
+
+        Returns:
+            Internal action name (e.g., "play_pause")
+        """
         action_map = {
             "⏯️ Play/Pause": "play_pause",
-  #          "▶️ Play": "play",
-  #          "⏸️ Pause": "pause",
             "⏭️ Next Track": "next_track",
             "⏮️ Previous Track": "previous_track",
             "⏩ Seek Forward": "seek_forward",
@@ -48,7 +58,15 @@ class ConfigHelpers:
         return action_map.get(display_name.strip(), display_name)
 
     def get_action_display_name(self, internal_name):
-        """Convert internal name to display name"""
+        """
+        Convert internal name to display name
+
+        Args:
+            internal_name: Internal action name (e.g., "play_pause")
+
+        Returns:
+            Display name (e.g., "⏯️ Play/Pause")
+        """
         display_map = {
             "play_pause": "⏯️ Play/Pause",
             "play": "▶️ Play",
@@ -65,7 +83,7 @@ class ConfigHelpers:
             "launch_app": "🚀 Launch App"
         }
         return display_map.get(internal_name, internal_name)
-    
+
     def get_available_targets(self):
         """Get list of available binding targets"""
         try:
@@ -92,13 +110,22 @@ class ConfigHelpers:
 
         except Exception as e:
             log_error(e, "Error getting available targets")
-            return ["🔊 Master", "🎤 Microphone", "🔔 System Sounds", "⭐ Current Application", "❔ Unbinded", "❌ None"]
+            return ["🔊 Master", "🎤 Microphone", "🔔 System Sounds",
+                    "⭐ Current Application", "❔ Unbinded", "❌ None"]
 
     def normalize_target_name(self, display_name):
-        """Convert display name to internal name"""
+        """
+        Convert display name to internal name
+
+        Args:
+            display_name: Display name (e.g., "🔊 Master")
+
+        Returns:
+            Internal target name (e.g., "Master")
+        """
         if not display_name:
             return ""
-            
+
         name = display_name.strip()
 
         if name.startswith("🔊"):
@@ -115,51 +142,64 @@ class ConfigHelpers:
             return "None"
         elif name.startswith("🎵"):
             return name[2:].strip()
-        elif name.startswith("─"):
-            return ""  # Separator, ignore
-        elif name.startswith("("):
-            return ""  # Placeholder text, ignore
+        elif name.startswith("─") or name.startswith("("):
+            return ""  # Separator/placeholder, ignore
         else:
             return name
 
     def get_display_name(self, internal_name):
-        """Convert internal name to display name"""
+        """
+        Convert internal name to display name
+
+        Args:
+            internal_name: Internal target name (e.g., "Master")
+
+        Returns:
+            Display name (e.g., "🔊 Master")
+        """
         if not internal_name:
             return ""
-        
-        # Strip any whitespace
+
         internal_name = internal_name.strip()
-            
+
         # Handle special cases
-        if internal_name == "Master":
-            return "🔊 Master"
-        elif internal_name == "Microphone":
-            return "🎤 Microphone"
-        elif internal_name == "System Sounds":
-            return "🔔 System Sounds"
-        elif internal_name == "Current Application":
-            return "⭐ Current Application"
-        elif internal_name == "Unbinded":
-            return "❔ Unbinded"
-        elif internal_name == "None":
-            # Legacy support
-            return "❌ None"
+        special_targets = {
+            "Master": "🔊 Master",
+            "Microphone": "🎤 Microphone",
+            "System Sounds": "🔔 System Sounds",
+            "Current Application": "⭐ Current Application",
+            "Unbinded": "❔ Unbinded",
+            "None": "❌ None"
+        }
+
+        if internal_name in special_targets:
+            return special_targets[internal_name]
         else:
-            # For application names, always add the music emoji
+            # For application names, add the music emoji
             return f"🎵 {internal_name}"
 
     def check_duplicate_binding(self, var_name, app_name):
-        """Check if a variable binding already exists for the app (excluding the current variable)"""
+        """
+        Check if a variable binding already exists for the app
+
+        Args:
+            var_name: Variable name to exclude from check
+            app_name: App name to check for duplicates
+
+        Returns:
+            True if duplicate binding exists, False otherwise
+        """
         try:
             # Special targets that can be bound multiple times
-            special_targets = ["Master", "Microphone", "System Sounds", "Current Application", "Unbinded", "None"]
-            
+            special_targets = ["Master", "Microphone", "System Sounds",
+                             "Current Application", "Unbinded", "None"]
+
             if not app_name or app_name in special_targets:
                 return False
-                
+
             config = self.config_manager.load_config()
             bindings = config.get('variable_bindings', {})
-            
+
             for name, details in bindings.items():
                 if name != var_name:  # Don't check against self
                     # Handle multiple formats
@@ -169,15 +209,15 @@ class ConfigHelpers:
                         bound_apps = details
                     else:
                         bound_apps = [details] if details else []
-                    
+
                     if isinstance(bound_apps, str):
                         bound_apps = [bound_apps]
-                    
+
                     if app_name in bound_apps:
                         return True
-                        
+
             return False
-            
+
         except Exception as e:
             log_error(e, "Error checking duplicate binding")
             return False

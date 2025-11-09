@@ -7,9 +7,8 @@ import sys
 import socket
 import pystray
 
-from ui.volume_tab import VolumeTab
 from ui.config_tab import ConfigTab
-from ui.serial_monitor import SerialMonitor
+from ui.tabs.serial_monitor_tab import SerialMonitorTab
 from audio.audio_manager import AudioManager
 from utils.error_handler import handle_error, log_error
 from utils.window_monitor import WindowMonitor
@@ -136,9 +135,8 @@ class VolumeControllerUI:
             self.notebook.pack(fill="both", expand=True)
 
             # Create tabs
-            self.volume_tab = VolumeTab(self.notebook, self.audio_manager, self.window_monitor)
             self.config_tab = ConfigTab(self.notebook, self.audio_manager)
-            self.serial_tab = SerialMonitor(self.notebook, self.audio_manager.serial_handler)
+            self.serial_tab = SerialMonitorTab(self.notebook, self.audio_manager.serial_handler)
 
             # Add tabs to notebook
             self.notebook.add(self.config_tab.frame, text="  Configuration  ")
@@ -238,8 +236,7 @@ class VolumeControllerUI:
         while self.running:
             try:
                 focused_app = self.window_monitor.get_focused_app()
-                if focused_app:
-                    self.volume_tab.update_focused_app(focused_app)
+                # Volume tab removed - monitoring still active for Current Application binding
                 time.sleep(0.3)
             except Exception as e:
                 log_error(e, "Error in monitoring loop")

@@ -7,8 +7,9 @@ from serial_comm.serial_handler import SerialHandler  # Still needed for serial_
 from utils.error_handler import handle_error, log_error
 
 # NEW IMPORTS
-from ui.config_helpers import ConfigHelpers
-from ui.config_serial_section import ConfigSerialSection
+from ui.utils.ui_helpers import UIHelpers
+from ui.handlers.serial_section_handler import SerialSectionHandler
+from ui.sections.serial_section_ui import SerialSectionUI
 from ui.config_bindings_section import ConfigBindingsSection
 from ui.config_button_section import ConfigButtonSection
 
@@ -24,7 +25,7 @@ class ConfigTab:
         self.unsaved_changes = False  # Keep unsaved_changes for older checks
 
         # NEW: Initialize helpers
-        self.helpers = ConfigHelpers(self.audio_manager, self.config_manager)
+        self.helpers = UIHelpers(self.audio_manager, self.config_manager)
 
         # Initialize section objects
         self.serial_section = None
@@ -74,11 +75,14 @@ class ConfigTab:
             main_container.grid_rowconfigure(2, weight=1)  # Button section
             main_container.grid_columnconfigure(0, weight=1)
 
-            # Serial Port Section
-            self.serial_section = ConfigSerialSection(
-                main_container,
+            # Serial Port Section - REFACTORED
+            serial_handler = SerialSectionHandler(
                 self.serial_handler,
                 self.config_manager
+            )
+            self.serial_section = SerialSectionUI(
+                main_container,
+                serial_handler
             )
             self.serial_section.frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
 
