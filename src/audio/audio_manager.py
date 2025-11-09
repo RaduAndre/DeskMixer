@@ -2,6 +2,7 @@ from utils.error_handler import log_error
 import threading
 import time
 import atexit
+from collections import defaultdict, deque
 
 # Try importing heavy audio libs; allow app to run without them (degraded mode).
 AUDIO_AVAILABLE = True
@@ -35,6 +36,10 @@ class AudioManager:
 
         # Track COM initialization state
         self._com_initialized = False
+
+        # Track slider history for averaging - PER SLIDER
+        self.slider_history = defaultdict(lambda: deque(maxlen=5))  # Default to normal mode (5)
+        self.history_sizes = {'soft': 5, 'normal': 10, 'hard': 20}
 
         if AUDIO_AVAILABLE:
             self._initialize()
@@ -278,7 +283,9 @@ class AudioManager:
                 self.get_all_audio_apps()
 
             if app_name in self.app_sessions:
-                adjusted_level = self._apply_volume_curve(level, mode)
+                # Note: The averaging is now done per slider in _handle_serial_data
+                # So we just use the level as-is here
+                adjusted_level = level
 
                 # Apply volume to ALL instances of the app
                 success_count = 0
@@ -511,6 +518,33 @@ class AudioManager:
 
         return None
 
+    def _apply_slider_averaging(self, slider_id, value, mode):
+        """Apply averaging to slider input based on mode"""
+        try:
+            # Update history size based on current mode
+            history_size = self.history_sizes.get(mode, 5)
+            if slider_id in self.slider_history:
+                # Resize the deque if needed
+                if self.slider_history[slider_id].maxlen != history_size:
+                    old_history = list(self.slider_history[slider_id])
+                    self.slider_history[slider_id] = deque(old_history[-history_size:], maxlen=history_size)
+            else:
+                self.slider_history[slider_id] = deque(maxlen=history_size)
+
+            # Add current value to history
+            self.slider_history[slider_id].append(value)
+
+            # Calculate average of historical values
+            if len(self.slider_history[slider_id]) > 0:
+                average_value = sum(self.slider_history[slider_id]) / len(self.slider_history[slider_id])
+                return average_value
+            else:
+                return value
+
+        except Exception as e:
+            log_error(e, f"Error applying slider averaging for {slider_id} in mode {mode}")
+            return value
+
     def _handle_serial_data(self, data):
         """Handle incoming serial data"""
         try:
@@ -526,8 +560,8 @@ class AudioManager:
                 return
 
             # Handle slider data
+            sliders_data = {}
             if '|' in data:
-                sliders_data = {}
                 parts = [p for p in data.strip().split('|') if p.strip()]
 
                 for part in parts:
@@ -552,6 +586,9 @@ class AudioManager:
                 slider_sampling = self.config_manager.get_slider_sampling()
 
                 for slider_id, value in sliders_data.items():
+                    # Apply averaging per slider based on mode
+                    averaged_value = self._apply_slider_averaging(slider_id, value, slider_sampling)
+
                     binding = bindings.get(slider_id)
                     if binding:
                         # Normalize to list format
@@ -568,14 +605,14 @@ class AudioManager:
                         # Process each target
                         for target in targets:
                             if target == "Master":
-                                self.set_master_volume(value, slider_sampling)
+                                self.set_master_volume(averaged_value)
                             elif target == "Microphone":
-                                self.set_mic_volume(value, slider_sampling)
+                                self.set_mic_volume(averaged_value)
                             elif target == "System Sounds":
-                                self.set_system_sounds_volume(value, slider_sampling)
+                                self.set_system_sounds_volume(averaged_value)
                             elif target == "Unbinded":
                                 # Set volume for all unbound apps
-                                self.set_unbinded_volumes(value, slider_sampling)
+                                self.set_unbinded_volumes(averaged_value)
                             elif target == "Current Application":
                                 # ALWAYS refresh audio sessions before trying
                                 self.get_all_audio_apps()
@@ -595,7 +632,7 @@ class AudioManager:
 
                                         # Skip if already bound to a different slider
                                         if matched_session not in bound_apps:
-                                            success = self.set_app_volume(matched_session, value, slider_sampling)
+                                            success = self.set_app_volume(matched_session, averaged_value)
 
                                             if success:
                                                 # Update volume tab if available
@@ -611,7 +648,7 @@ class AudioManager:
                                 pass
                             else:
                                 # Specific application (custom or from list)
-                                self.set_app_volume(target, value, slider_sampling)
+                                self.set_app_volume(target, averaged_value)
 
         except Exception as e:
             log_error(e, f"Error handling serial data: {data}")
@@ -684,6 +721,9 @@ class AudioManager:
             self.master_volume = None
             self.mic_volume = None
 
+            # Clear slider history
+            self.slider_history.clear()
+
             # Uninitialize COM if available
             if AUDIO_AVAILABLE and self._com_initialized:
                 try:
@@ -705,8 +745,8 @@ class AudioManager:
         except Exception as e:
             log_error(e, "Error in AudioManager destructor")
 
-    def set_unbinded_volumes(self, level, mode='normal'):
-        """Set volume for all unbinded applications with curve applied (excluding Master, Microphone, and currently focused app if Current Application binding exists)"""
+    def set_unbinded_volumes(self, level):
+        """Set volume for all unbinded applications (excluding Master, Microphone, and currently focused app if Current Application binding exists)"""
         try:
             if not AUDIO_AVAILABLE:
                 return
@@ -747,9 +787,6 @@ class AudioManager:
                 # Still need to refresh sessions
                 self.get_all_audio_apps()
 
-            # Apply volume curve
-            adjusted_level = self._apply_volume_curve(level, mode)
-
             # Create a snapshot of current sessions to avoid dictionary size change during iteration
             current_sessions = dict(self.app_sessions)
 
@@ -769,7 +806,7 @@ class AudioManager:
                         # Verify session still exists before trying to set volume
                         if app_name in self.app_sessions:
                             def set_volume_operation(session_obj=session):
-                                session_obj.SetMasterVolume(adjusted_level, None)
+                                session_obj.SetMasterVolume(level, None)
                                 return True
 
                             self._safe_com_operation(
@@ -783,19 +820,17 @@ class AudioManager:
         except Exception as e:
             log_error(e, "Error setting unbinded volumes")
 
-    def set_system_sounds_volume(self, level, mode='normal'):
+    def set_system_sounds_volume(self, level):
         """Set volume for System Sounds (Windows notification sounds)"""
         try:
             if not AUDIO_AVAILABLE:
                 return False
 
-            adjusted_level = self._apply_volume_curve(level, mode)
-
             def set_system_volume_operation():
                 # Try to use cached session first
                 if self.system_sounds_session:
                     try:
-                        self.system_sounds_session.SetMasterVolume(adjusted_level, None)
+                        self.system_sounds_session.SetMasterVolume(level, None)
                         return True
                     except:
                         # Session may have become invalid, refresh
@@ -804,7 +839,7 @@ class AudioManager:
                 # Refresh and try again
                 if self._refresh_system_sounds_session():
                     try:
-                        self.system_sounds_session.SetMasterVolume(adjusted_level, None)
+                        self.system_sounds_session.SetMasterVolume(level, None)
                         return True
                     except Exception as e:
                         log_error(e, "Error setting system sounds volume after refresh")
@@ -816,7 +851,7 @@ class AudioManager:
                         try:
                             # Apply to all instances
                             for session in self.app_sessions[app_name]:
-                                session.SetMasterVolume(adjusted_level, None)
+                                session.SetMasterVolume(level, None)
                             return True
                         except Exception as e:
                             log_error(e, f"Error setting volume for {app_name}")
@@ -832,22 +867,6 @@ class AudioManager:
         except Exception as e:
             log_error(e, "Error setting system sounds volume")
             return False
-
-    def _apply_volume_curve(self, value, mode):
-        """Apply volume curve based on mode setting"""
-        try:
-            if mode == "soft":
-                # Soft curve: gentler at low volumes, more responsive at high
-                return value ** 0.5
-            elif mode == "hard":
-                # Hard curve: less responsive at low volumes, more precise at high
-                return value ** 2
-            else:  # normal
-                # Linear curve
-                return value
-        except Exception as e:
-            log_error(e, f"Error applying volume curve for mode {mode}")
-            return value
 
     def get_master_volume(self):
         """Get master volume level (0.0 to 1.0)"""
@@ -882,17 +901,15 @@ class AudioManager:
                 pass
             return 0.5
 
-    def set_master_volume(self, level, mode='normal'):
-        """Set master volume level (0.0 to 1.0) with curve applied"""
+    def set_master_volume(self, level):
+        """Set master volume level (0.0 to 1.0)"""
         try:
             if not AUDIO_AVAILABLE or not self.master_volume:
                 return
 
-            adjusted_level = self._apply_volume_curve(level, mode)
-
             def set_volume_operation():
                 # NEW API: Direct method call on EndpointVolume
-                self.master_volume.SetMasterVolumeLevelScalar(adjusted_level, None)
+                self.master_volume.SetMasterVolumeLevelScalar(level, None)
                 return True
 
             success = self._safe_com_operation(
@@ -939,17 +956,15 @@ class AudioManager:
             log_error(e, "Error getting mic volume")
             return 0.5
 
-    def set_mic_volume(self, level, mode='normal'):
-        """Set microphone volume level (0.0 to 1.0) with curve applied"""
+    def set_mic_volume(self, level):
+        """Set microphone volume level (0.0 to 1.0)"""
         try:
             if not AUDIO_AVAILABLE or not self.mic_volume:
                 return
 
-            adjusted_level = self._apply_volume_curve(level, mode)
-
             def set_volume_operation():
                 # NEW API: Direct method call on EndpointVolume
-                self.mic_volume.SetMasterVolumeLevelScalar(adjusted_level, None)
+                self.mic_volume.SetMasterVolumeLevelScalar(level, None)
                 return True
 
             self._safe_com_operation(
