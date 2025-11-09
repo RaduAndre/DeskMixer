@@ -213,22 +213,6 @@ python main.py
 
 ---
 
-## 🔧 Audio Output Switching Setup
-
-To use the "Switch Audio Output" button action:
-
-1. Open PowerShell as Administrator
-2. Run: 
-```powershell
-Install-Module -Name AudioDeviceCmdlets -Force
-```
-3. Type 'Y' if prompted about repository trust
-4. Restart DeskMixer
-
-[More info about AudioDeviceCmdlets](https://github.com/frgnca/AudioDeviceCmdlets)
-
----
-
 ## 🏗️ Building from Source
 
 Create your own executable using either method:
@@ -245,7 +229,7 @@ cd src
 python build_nuitka.py
 ```
 
-Built executables will appear in `src/dist/`
+Built executables will appear in `src/build/dist/`
 
 ---
 
