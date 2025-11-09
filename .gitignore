@@ -6,17 +6,11 @@
 
 IDE-specific directories (IntelliJ/PyCharm/WebStorm, etc.)
 
-src/.idea/
 .idea/
 
 Virtual Environments
 
 .venv
-.venv1
-src/.venv/
-src/env/
-src/venv/
-src/Venv/
 
 ----------------------------------------------------------------------
 
@@ -26,44 +20,9 @@ src/Venv/
 
 Python bytecode/cache directories
 
-src/audio/pycache/
-src/serial_comm/pycache/
-src/ui/pycache/
-src/utils/pycache/
 *.pyc
 
 PyInstaller/Nuika/spec files (used for creating executables)
 
-src/DeskMixer.spec
-DeskMixer.spec
-src/build/
-build/
-src/dist/config/
-dist/config/
-src/dist/error.log
-dist/error.log
-src/nuitka-crash-report.xml
-src/main.build
-src/main.dist
-src/main.onefile-build
+src/build/build_files
 
-
-
-
-----------------------------------------------------------------------
-
-3. Local Configuration and Logs (Secret/Ephemeral Data)
-
-----------------------------------------------------------------------
-
-Log files
-
-error.log
-src/error.log
-src/config/error.log
-
-Local configuration files that should not be shared or tracked
-
-(especially if they contain secrets or local paths)
-
-src/config/config.json
