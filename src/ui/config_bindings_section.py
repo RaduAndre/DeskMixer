@@ -410,17 +410,31 @@ class ConfigBindingsSection:
             selector_frame = tk.Frame(targets_frame, bg="#353535")
             selector_frame.pack(fill="x", pady=2)
 
-            # Get available targets
+            # Get available targets (running apps)
             targets = self.helpers.get_available_targets()
 
-            # Add "Select another app..." option at the end
-            targets.append("─────────────────────")
-            targets.append("🔍 Select another app...")
+            # Get user's preferred app list from config
+            app_list = self.config_manager.get_app_list()
+
+            # Start with running apps
+            combined_targets = targets.copy()
+
+            # Add separators and app_list section
+            combined_targets.append("─────────────────────")
+
+            # Add preferred apps (app_list)
+            for app in app_list:
+                if app not in combined_targets:
+                    combined_targets.append(app)
+
+            # Add final separator and browse option
+            combined_targets.append("─────────────────────")
+            combined_targets.append("🔍 Select another app...")
 
             # Combobox (editable to allow custom app names)
             combo = ttk.Combobox(
                 selector_frame,
-                values=targets,
+                values=combined_targets,
                 width=30,
                 font=("Arial", 9)
             )
@@ -428,22 +442,12 @@ class ConfigBindingsSection:
 
             # Set current value
             display_name = self.helpers.get_display_name(selected_app)
-            if display_name and display_name not in targets:
-                # Add custom app to list
-                separator_idx = -1
-                for idx, target in enumerate(targets):
-                    if target.startswith("─"):
-                        separator_idx = idx
-                        break
+            if display_name and display_name not in combined_targets:
+                # Add custom app to app_list section (before last separator)
+                combined_targets.insert(-2, display_name)
+                combo['values'] = combined_targets
 
-                if separator_idx > 0:
-                    targets.insert(separator_idx + 1, display_name)
-                else:
-                    # Insert before the last separator and browse option
-                    targets.insert(-2, display_name)
-                combo['values'] = targets
-
-            combo.set(display_name if display_name else "❌ None")
+            combo.set(display_name if display_name else "⌀ None")
 
             # Function to handle file browsing
             def on_browse_file():
@@ -466,33 +470,23 @@ class ConfigBindingsSection:
                         # Extract just the executable name (e.g., "chrome.exe")
                         exe_name = os.path.basename(file_path)
 
-                        # Update the combobox with the exe name
+                        # Add to user's preferred app list
+                        self.config_manager.add_to_app_list(exe_name)
+
+                        # Update the combobox values
                         current_targets = list(combo['values'])
 
-                        # Find the separator before "Select another app..."
-                        separator_idx = -1
-                        for idx, target in enumerate(current_targets):
-                            if target.startswith("─") and idx < len(current_targets) - 1:
-                                if "Select another app" in current_targets[idx + 1]:
-                                    separator_idx = idx
-                                    break
-
-                        # Add the new app if not already in list
+                        # Add the new app to app_list section (before last separator and browse option)
                         if exe_name not in current_targets:
-                            if separator_idx > 0:
-                                current_targets.insert(separator_idx + 1, exe_name)
-                            else:
-                                current_targets.insert(-2, exe_name)
+                            current_targets.insert(-2, exe_name)
                             combo['values'] = current_targets
 
                         # Set the selected value
                         combo.set(exe_name)
 
-                        # Clear selection and remove focus to prevent text highlighting
+                        # Clear selection and remove focus
                         combo.selection_clear()
-                        combo.icursor(tk.END)  # Move cursor to end
-
-                        # Remove focus from combobox
+                        combo.icursor(tk.END)
                         self.bindings_container.focus_set()
 
                         # Trigger auto-save
@@ -508,7 +502,7 @@ class ConfigBindingsSection:
                 selected = combo.get()
                 if selected == "🔍 Select another app...":
                     # Reset to previous value temporarily
-                    combo.set(display_name if display_name else "❌ None")
+                    combo.set(display_name if display_name else "⌀ None")
                     # Open file browser
                     on_browse_file()
                 else:
@@ -525,36 +519,43 @@ class ConfigBindingsSection:
                     if current_value == "🔍 Select another app...":
                         return
 
+                    # Get running apps
                     updated_targets = self.helpers.get_available_targets()
 
-                    # Add separators and browse option
-                    updated_targets.append("─────────────────────")
-                    updated_targets.append("🔍 Select another app...")
+                    # Get user's preferred app list
+                    app_list = self.config_manager.get_app_list()
 
-                    # Add current value to targets if not present
-                    if current_value and current_value not in updated_targets:
-                        # Find separator before browse option
-                        separator_idx = -1
-                        for idx, target in enumerate(updated_targets):
-                            if target.startswith("─") and idx < len(updated_targets) - 1:
-                                if "Select another app" in updated_targets[idx + 1]:
-                                    separator_idx = idx
-                                    break
+                    # Build list: running apps, separator, app_list, separator, browse
+                    combined_targets = updated_targets.copy()
 
-                        if separator_idx > 0:
-                            updated_targets.insert(separator_idx + 1, current_value)
-                        else:
-                            updated_targets.insert(-2, current_value)
+                    # Add first separator
+                    combined_targets.append("─────────────────────")
 
-                    combo['values'] = updated_targets
-                    # Keep the current selection
+                    # Add app_list apps
+                    for app in app_list:
+                        if app not in combined_targets:
+                            combined_targets.append(app)
+
+                    # Add final separator and browse option
+                    combined_targets.append("─────────────────────")
+                    combined_targets.append("🔍 Select another app...")
+
+                    # Add current value if not present (in app_list section)
+                    if current_value and current_value not in combined_targets:
+                        combined_targets.insert(-2, current_value)
+
+                    combo['values'] = combined_targets
                     combo.set(current_value)
+
                 except Exception as e:
                     log_error(e, "Error refreshing dropdown")
 
-            # Bind the dropdown open event
+            # Bind events
             combo.bind('<Button-1>', on_dropdown_open)
-            combo.bind('<Down>', on_dropdown_open)  # Also refresh on keyboard navigation
+            combo.bind('<Down>', on_dropdown_open)
+            combo.bind('<<ComboboxSelected>>', on_combo_select)
+            combo.bind('<FocusOut>', lambda e: self._auto_save_binding(row_frame))
+            combo.bind('<Return>', lambda e: self._auto_save_binding(row_frame))
 
             # Plus button to add another selector
             plus_btn = tk.Button(
@@ -597,13 +598,6 @@ class ConfigBindingsSection:
 
             # Update minus button visibility
             self._update_minus_button_visibility(row_frame)
-
-            # Bind events for auto-save
-            combo.bind('<<ComboboxSelected>>', on_combo_select)
-            combo.bind('<FocusOut>',
-                       lambda e: self._auto_save_binding(row_frame))
-            combo.bind('<Return>',
-                       lambda e: self._auto_save_binding(row_frame))
 
         except Exception as e:
             log_error(e, "Error adding target selector")

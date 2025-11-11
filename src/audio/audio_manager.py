@@ -52,18 +52,7 @@ class AudioManager:
 
     def _safe_com_operation(self, operation, operation_name="COM operation", default_return=None,
                             retry_on_failure=True):
-        """
-        Safely execute a COM operation with comprehensive error handling
 
-        Args:
-            operation: Callable that performs the COM operation
-            operation_name: Name of the operation for error reporting
-            default_return: Value to return if operation fails
-            retry_on_failure: Whether to attempt recovery and retry once
-
-        Returns:
-            Result of operation or default_return if failed
-        """
         try:
             return operation()
         except Exception as e:

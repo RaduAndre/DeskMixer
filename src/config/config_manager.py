@@ -176,6 +176,44 @@ class ConfigManager:
         """Get the global volume control mode"""
         return self.config.get('slider_sampling', default)
 
+    def get_app_list(self):
+        """Get the list of user's preferred apps"""
+        return self.config.get('app_list', [])
+
+    def add_to_app_list(self, app_name):
+        """Add an app to the user's preferred app list"""
+        try:
+            if not app_name or app_name in ["None", "⌀ None"]:
+                return False
+
+            if 'app_list' not in self.config:
+                self.config['app_list'] = []
+
+            # Add if not already in list
+            if app_name not in self.config['app_list']:
+                self.config['app_list'].append(app_name)
+                self.has_changes = True
+                self.save_config()
+                return True
+
+            return False
+        except Exception as e:
+            log_error(e, f"Error adding {app_name} to app list")
+            return False
+
+    def remove_from_app_list(self, app_name):
+        """Remove an app from the user's preferred app list"""
+        try:
+            if 'app_list' in self.config and app_name in self.config['app_list']:
+                self.config['app_list'].remove(app_name)
+                self.has_changes = True
+                self.save_config()
+                return True
+            return False
+        except Exception as e:
+            log_error(e, f"Error removing {app_name} from app list")
+            return False
+
     def set_start_in_tray(self, value):
         """Set the value for the start_in_tray config key."""
         key = 'start_in_tray'
