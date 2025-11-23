@@ -15,6 +15,9 @@ except Exception as _e:
     log_error(_e, "Audio libraries (comtypes/pycaw) not available - running in degraded mode")
 
 
+VOLUME_TOLERANCE = 0.005  # 0.5% tolerance for volume changes
+
+
 class AudioManager:
     """Manages all audio-related operations"""
 
@@ -40,6 +43,9 @@ class AudioManager:
         # Track slider history for averaging - PER SLIDER
         self.slider_history = defaultdict(lambda: deque(maxlen=5))  # Default to normal mode (5)
         self.history_sizes = {'soft': 5, 'normal': 10, 'hard': 20}
+
+        # Track last set volumes to avoid redundant calls
+        self.last_set_volumes = {}
 
         if AUDIO_AVAILABLE:
             self._initialize()
@@ -275,6 +281,13 @@ class AudioManager:
                 # Note: The averaging is now done per slider in _handle_serial_data
                 # So we just use the level as-is here
                 adjusted_level = level
+
+                # Check if volume changed significantly
+                last_level = self.last_set_volumes.get(app_name, -1)
+                if abs(adjusted_level - last_level) < VOLUME_TOLERANCE:
+                    return True
+
+                self.last_set_volumes[app_name] = adjusted_level
 
                 # Apply volume to ALL instances of the app
                 success_count = 0
@@ -779,6 +792,13 @@ class AudioManager:
             # Create a snapshot of current sessions to avoid dictionary size change during iteration
             current_sessions = dict(self.app_sessions)
 
+            # Check if volume changed significantly for unbinded
+            last_level = self.last_set_volumes.get("Unbinded", -1)
+            if abs(level - last_level) < VOLUME_TOLERANCE:
+                return
+
+            self.last_set_volumes["Unbinded"] = level
+
             # Set volume for all unbound apps
             for app_name, sessions_list in current_sessions.items():
                 # Skip if app is bound to another slider
@@ -814,6 +834,13 @@ class AudioManager:
         try:
             if not AUDIO_AVAILABLE:
                 return False
+
+            # Check if volume changed significantly
+            last_level = self.last_set_volumes.get("System Sounds", -1)
+            if abs(level - last_level) < VOLUME_TOLERANCE:
+                return True
+
+            self.last_set_volumes["System Sounds"] = level
 
             def set_system_volume_operation():
                 # Try to use cached session first
@@ -896,6 +923,13 @@ class AudioManager:
             if not AUDIO_AVAILABLE or not self.master_volume:
                 return
 
+            # Check if volume changed significantly
+            last_level = self.last_set_volumes.get("Master", -1)
+            if abs(level - last_level) < VOLUME_TOLERANCE:
+                return
+
+            self.last_set_volumes["Master"] = level
+
             def set_volume_operation():
                 # NEW API: Direct method call on EndpointVolume
                 self.master_volume.SetMasterVolumeLevelScalar(level, None)
@@ -950,6 +984,13 @@ class AudioManager:
         try:
             if not AUDIO_AVAILABLE or not self.mic_volume:
                 return
+
+            # Check if volume changed significantly
+            last_level = self.last_set_volumes.get("Microphone", -1)
+            if abs(level - last_level) < VOLUME_TOLERANCE:
+                return
+
+            self.last_set_volumes["Microphone"] = level
 
             def set_volume_operation():
                 # NEW API: Direct method call on EndpointVolume
