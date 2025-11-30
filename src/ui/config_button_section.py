@@ -319,7 +319,7 @@ class ConfigButtonSection:
                 # Clean the keybind value thoroughly
                 if keybind_value:
                     # Remove mic emoji
-                    keybind_value = keybind_value.replace("🎙️", "").strip()
+                    # keybind_value = keybind_value.replace("🎙️", "").strip()
 
                     # Filter out recording messages and empty values
                     if keybind_value and \
@@ -589,7 +589,7 @@ class ConfigButtonSection:
             # Record button for keybind
             keybind_record_btn = tk.Button(
                 dynamic_frame,
-                text="🎤 Record",
+                text="Record",
                 command=lambda: self._record_keybind(keybind_entry, keybind_var, auto_save_wrapper),
                 bg="#404040",
                 fg="white",
@@ -734,7 +734,7 @@ class ConfigButtonSection:
             # Test button
             test_btn = tk.Button(
                 btn_frame,
-                text="▶️",
+                text="Test",
                 command=lambda: self._test_button_action(
                     self.helpers.normalize_action_name(action_var.get()),
                     self.helpers.normalize_target_name(target_var.get()) if target_var.get() else "",
@@ -755,7 +755,7 @@ class ConfigButtonSection:
             # Clear binding button (instead of delete)
             clear_btn = tk.Button(
                 btn_frame,
-                text="🗑",
+                text="Clear",
                 command=lambda: self._clear_button_binding(button_name, row_frame, action_combo, dynamic_frame),
                 bg="#5c1a1a",
                 fg="white",
@@ -791,7 +791,7 @@ class ConfigButtonSection:
 
             # Visual feedback - recording mode
             entry_widget.configure(background="#4a4a00", state="readonly")
-            keybind_var.set("🎙️ Recording... (ESC to cancel)")
+            keybind_var.set("Recording... (ESC to cancel)")
 
             recorded_keys = []
             is_recording = True
@@ -850,7 +850,7 @@ class ConfigButtonSection:
 
                 # Display current combination with recording indicator
                 display_text = '+'.join(recorded_keys)
-                keybind_var.set(f"🎙️ {display_text}")
+                keybind_var.set(f"{display_text}")
 
             def on_key_release(event):
                 nonlocal is_recording, recording_complete
@@ -936,8 +936,8 @@ class ConfigButtonSection:
             elif action == "keybind" and keybind:
                 # Clean the keybind value - remove mic emoji if present
                 clean_keybind = keybind.strip()
-                if clean_keybind.startswith("🎙️"):
-                    clean_keybind = clean_keybind.replace("🎙️", "").strip()
+                # if clean_keybind.startswith("🎙️"):
+                #    clean_keybind = clean_keybind.replace("🎙️", "").strip()
 
                 # Don't test if it's still a recording message
                 if not clean_keybind or "Recording" in clean_keybind or "ESC to cancel" in clean_keybind:

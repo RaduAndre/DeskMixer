@@ -19,17 +19,17 @@ class UIHelpers:
     def get_available_actions(self):
         """Get list of available actions"""
         return [
-            "⏯️ Play/Pause",
-            "⏭️ Next Track",
-            "⏮️ Previous Track",
-            "⏩ Seek Forward",
-            "⏪ Seek Backward",
-            "🔊 Volume Up",
-            "🔉 Volume Down",
-            "🔇 Mute",
-            "🔀 Switch Audio Output",
-            "⌨️ Keybind (Custom)",
-            "🚀 Launch App"
+            "Play/Pause",
+            "Next Track",
+            "Previous Track",
+            "Seek Forward",
+            "Seek Backward",
+            "Volume Up",
+            "Volume Down",
+            "Mute",
+            "Switch Audio Output",
+            "Keybind (Custom)",
+            "Launch App"
         ]
 
     def normalize_action_name(self, display_name):
@@ -37,23 +37,23 @@ class UIHelpers:
         Convert display name to internal action name
 
         Args:
-            display_name: Display name (e.g., "⏯️ Play/Pause")
+            display_name: Display name (e.g., "Play/Pause")
 
         Returns:
             Internal action name (e.g., "play_pause")
         """
         action_map = {
-            "⏯️ Play/Pause": "play_pause",
-            "⏭️ Next Track": "next_track",
-            "⏮️ Previous Track": "previous_track",
-            "⏩ Seek Forward": "seek_forward",
-            "⏪ Seek Backward": "seek_backward",
-            "🔊 Volume Up": "volume_up",
-            "🔉 Volume Down": "volume_down",
-            "🔇 Mute": "mute",
-            "🔀 Switch Audio Output": "switch_audio_output",
-            "⌨️ Keybind (Custom)": "keybind",
-            "🚀 Launch App": "launch_app"
+            "Play/Pause": "play_pause",
+            "Next Track": "next_track",
+            "Previous Track": "previous_track",
+            "Seek Forward": "seek_forward",
+            "Seek Backward": "seek_backward",
+            "Volume Up": "volume_up",
+            "Volume Down": "volume_down",
+            "Mute": "mute",
+            "Switch Audio Output": "switch_audio_output",
+            "Keybind (Custom)": "keybind",
+            "Launch App": "launch_app"
         }
         return action_map.get(display_name.strip(), display_name)
 
@@ -65,22 +65,22 @@ class UIHelpers:
             internal_name: Internal action name (e.g., "play_pause")
 
         Returns:
-            Display name (e.g., "⏯️ Play/Pause")
+            Display name (e.g., "Play/Pause")
         """
         display_map = {
-            "play_pause": "⏯️ Play/Pause",
-            "play": "▶️ Play",
-            "pause": "⏸️ Pause",
-            "next_track": "⏭️ Next Track",
-            "previous_track": "⏮️ Previous Track",
-            "seek_forward": "⏩ Seek Forward",
-            "seek_backward": "⏪ Seek Backward",
-            "volume_up": "🔊 Volume Up",
-            "volume_down": "🔉 Volume Down",
-            "mute": "🔇 Mute",
-            "switch_audio_output": "🔀 Switch Audio Output",
-            "keybind": "⌨️ Keybind (Custom)",
-            "launch_app": "🚀 Launch App"
+            "play_pause": "Play/Pause",
+            "play": "Play",
+            "pause": "Pause",
+            "next_track": "Next Track",
+            "previous_track": "Previous Track",
+            "seek_forward": "Seek Forward",
+            "seek_backward": "Seek Backward",
+            "volume_up": "Volume Up",
+            "volume_down": "Volume Down",
+            "mute": "Mute",
+            "switch_audio_output": "Switch Audio Output",
+            "keybind": "Keybind (Custom)",
+            "launch_app": "Launch App"
         }
         return display_map.get(internal_name, internal_name)
 
@@ -88,12 +88,12 @@ class UIHelpers:
         """Get list of available binding targets"""
         try:
             targets = [
-                "🔊 Master",
-                "🎤 Microphone",
-                "🔔 System Sounds",
-                "⭐ Current Application",
-                "❔ Unbinded",
-                "❌ None"
+                "Master",
+                "Microphone",
+                "System Sounds",
+                "Current Application",
+                "Unbinded",
+                "None"
             ]
 
             targets.append("─" * 30)
@@ -102,7 +102,7 @@ class UIHelpers:
 
             if apps:
                 for app_name in sorted(apps.keys()):
-                    targets.append(f"🎵 {app_name}")
+                    targets.append(f"{app_name}")
             else:
                 targets.append("(No audio apps running)")
 
@@ -110,15 +110,15 @@ class UIHelpers:
 
         except Exception as e:
             log_error(e, "Error getting available targets")
-            return ["🔊 Master", "🎤 Microphone", "🔔 System Sounds",
-                    "⭐ Current Application", "❔ Unbinded", "❌ None"]
+            return ["Master", "Microphone", "System Sounds",
+                    "Current Application", "Unbinded", "None"]
 
     def normalize_target_name(self, display_name):
         """
         Convert display name to internal name
 
         Args:
-            display_name: Display name (e.g., "🔊 Master")
+            display_name: Display name (e.g., "Master")
 
         Returns:
             Internal target name (e.g., "Master")
@@ -127,25 +127,12 @@ class UIHelpers:
             return ""
 
         name = display_name.strip()
+        
+        # Handle separator/placeholder
+        if name.startswith("─") or name.startswith("("):
+            return ""
 
-        if name.startswith("🔊"):
-            return "Master"
-        elif name.startswith("🎤"):
-            return "Microphone"
-        elif name.startswith("🔔"):
-            return "System Sounds"
-        elif name.startswith("⭐"):
-            return "Current Application"
-        elif name.startswith("❔"):
-            return "Unbinded"
-        elif name.startswith("❌"):
-            return "None"
-        elif name.startswith("🎵"):
-            return name[2:].strip()
-        elif name.startswith("─") or name.startswith("("):
-            return ""  # Separator/placeholder, ignore
-        else:
-            return name
+        return name
 
     def get_display_name(self, internal_name):
         """
@@ -155,28 +142,12 @@ class UIHelpers:
             internal_name: Internal target name (e.g., "Master")
 
         Returns:
-            Display name (e.g., "🔊 Master")
+            Display name (e.g., "Master")
         """
         if not internal_name:
             return ""
 
-        internal_name = internal_name.strip()
-
-        # Handle special cases
-        special_targets = {
-            "Master": "🔊 Master",
-            "Microphone": "🎤 Microphone",
-            "System Sounds": "🔔 System Sounds",
-            "Current Application": "⭐ Current Application",
-            "Unbinded": "❔ Unbinded",
-            "None": "❌ None"
-        }
-
-        if internal_name in special_targets:
-            return special_targets[internal_name]
-        else:
-            # For application names, add the music emoji
-            return f"🎵 {internal_name}"
+        return internal_name.strip()
 
     def check_duplicate_binding(self, var_name, app_name):
         """

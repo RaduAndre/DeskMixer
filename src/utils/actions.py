@@ -151,7 +151,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             # Title
             title_label = tk.Label(
                 dialog,
-                text="⚠️ AudioDeviceCmdlets Not Found",
+                text="AudioDeviceCmdlets Not Found",
                 bg="#2d2d2d",
                 fg="#ffaa00",
                 font=("Arial", 14, "bold"),
@@ -382,24 +382,13 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             log_error(e, "Error in volume_down")
             return False
 
-    def mute(self, target=None, **kwargs):
-        """Mute/unmute"""
+    def mute(self, **kwargs):
+        """Toggle mute"""
         try:
-            if target and self.audio_manager:
-                if target == "Master":
-                    current = self.audio_manager.master_volume.GetMute()
-                    self.audio_manager.master_volume.SetMute(not current, None)
-                    return True
-                elif target == "Microphone":
-                    if self.audio_manager.has_microphone():
-                        current = self.audio_manager.mic_volume.GetMute()
-                        self.audio_manager.mic_volume.SetMute(not current, None)
-                        return True
-                else:
-                    return self.audio_manager.toggle_app_mute(target)
-            else:
-                self._send_media_key(0xAD)
+            if self.audio_manager:
+                self.audio_manager.toggle_master_mute()
                 return True
+            return False
         except Exception as e:
             log_error(e, "Error in mute")
             return False
@@ -456,39 +445,6 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
                     ImportError("keyboard module not available"),
                     "Cannot execute keybind"
                 )
-                return False
-
-            import keyboard
-
-            if isinstance(keys, str):
-                # Clean the keys string - remove any emojis or special characters
-                clean_keys = keys.strip()
-
-                # Remove mic emoji if somehow it made it here
-                if "🎙️" in clean_keys:
-                    clean_keys = clean_keys.replace("🎙️", "").strip()
-
-                # Don't execute if it's a recording message or empty
-                if not clean_keys or "Recording" in clean_keys or "ESC to cancel" in clean_keys:
-                    log_error(
-                        ValueError("Invalid keybind value"),
-                        f"Cannot execute keybind: {keys}"
-                    )
-                    return False
-
-                keyboard.press_and_release(clean_keys)
-                return True
-            elif isinstance(keys, list):
-                for key in keys:
-                    clean_key = key.strip()
-                    if "🎙️" in clean_key:
-                        clean_key = clean_key.replace("🎙️", "").strip()
-
-                    if clean_key and "Recording" not in clean_key:
-                        keyboard.press_and_release(clean_key)
-                        time.sleep(0.05)
-                return True
-            else:
                 return False
 
         except Exception as e:

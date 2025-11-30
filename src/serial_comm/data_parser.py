@@ -1,17 +1,27 @@
-class SerialDataParser:
-    """Parser for serial data.
+from dataclasses import dataclass
+from typing import Dict, Optional, Union
+from utils.error_handler import log_error
 
-    Supports two input formats:
-      - Single-line pipe-separated: "s1 1023|s2 91|...|b1 0|b2 1"
-      - Multi-line simple entries: "s1 296\ns1 308\ns2 341\n..."
-    The parser returns the latest values seen for each slider/button:
-      { 'sliders': {'p1': 0.289, ...}, 'buttons': {'b1': True, ...} }
-    Slider values are normalized from 0-1023 -> 0.0-1.0.
-    Button values are converted to booleans (1 -> True).
-    """
+@dataclass
+class ButtonEvent:
+    button_id: str
+    state: bool  # True for pressed (1), False for released (0)
+
+@dataclass
+class SliderEvent:
+    slider_id: str
+    value: float  # Normalized 0.0 - 1.0
+
+@dataclass
+class SerialDataEvent:
+    sliders: Dict[str, float]
+    buttons: Dict[str, bool]
+
+class SerialDataParser:
+    """Parser for serial data returning structured events"""
 
     @staticmethod
-    def parse_data(data_str):
+    def parse_data(data_str: str) -> Optional[SerialDataEvent]:
         """Parse serial data string into slider/button dict"""
         try:
             if not data_str:
@@ -19,30 +29,85 @@ class SerialDataParser:
 
             if isinstance(data_str, bytes):
                 data_str = data_str.decode('utf-8', errors='ignore')
+            
+            data_str = data_str.strip()
+            sliders = {}
+            buttons = {}
 
-            result = {'sliders': {}, 'buttons': {}}
-
-            # Handle lines with pipe-separated values
+            # Handle lines with pipe-separated values (e.g. "Slider 1 364|Slider 2 351")
             if '|' in data_str:
-                # Process slider values
-                parts = data_str.strip().split('|')
+                parts = data_str.split('|')
                 for part in parts:
-                    key, value = part.strip().split()
-                    if key.startswith('s'):
-                        try:
-                            value = float(value) / 1023.0  # Normalize to 0-1
-                            result['sliders'][key] = value
-                        except ValueError:
-                            continue
-            # Handle single button values
-            elif data_str.startswith('b'):
-                key, value = data_str.strip().split()
+                    part = part.strip()
+                    if not part: continue
+                    
+                    try:
+                        # Try parsing "Slider X Y" format
+                        sub_parts = part.split()
+                        if len(sub_parts) == 3 and sub_parts[0] == 'Slider':
+                            _, slider_num, value = sub_parts
+                            key = f"s{slider_num}"
+                            normalized_value = float(value) / 1023.0
+                            sliders[key] = normalized_value
+                        
+                        # Try parsing legacy "sX Y" format
+                        elif len(sub_parts) == 2:
+                            key, value = sub_parts
+                            if key.startswith('s'):
+                                value = float(value) / 1023.0
+                                sliders[key] = value
+                    except ValueError:
+                        continue
+            
+            # Handle raw "Slider X Y" format (e.g. "Slider 0 1023")
+            elif data_str.startswith('Slider '):
                 try:
-                    result['buttons'][key] = (value == '1')
+                    parts = data_str.split()
+                    if len(parts) == 3:
+                        _, slider_num, value = parts
+                        key = f"s{slider_num}"
+                        normalized_value = float(value) / 1023.0
+                        sliders[key] = normalized_value
                 except ValueError:
                     pass
 
-            return result
+            # Handle raw "Button X Y" format (e.g. "Button 1 1")
+            elif data_str.startswith('Button '):
+                try:
+                    parts = data_str.split()
+                    if len(parts) == 3:
+                        _, button_num, state = parts
+                        key = f"b{button_num}"
+                        buttons[key] = (state == '1')
+                except ValueError:
+                    pass
+
+            # Handle legacy/simple format "bX Y" (e.g. "b1 1")
+            elif data_str.startswith('b'):
+                try:
+                    parts = data_str.split()
+                    if len(parts) == 2:
+                        key, value = parts
+                        buttons[key] = (value == '1')
+                except ValueError:
+                    pass
+            
+            # Handle legacy/simple format "sX Y" (e.g. "s0 1023")
+            elif data_str.startswith('s'):
+                try:
+                    parts = data_str.split()
+                    if len(parts) == 2:
+                        key, value = parts
+                        if key[1:].isdigit(): # Ensure it's s0, s1 etc
+                             normalized_value = float(value) / 1023.0
+                             sliders[key] = normalized_value
+                except ValueError:
+                    pass
+
+            if not sliders and not buttons:
+                return None
+
+            return SerialDataEvent(sliders=sliders, buttons=buttons)
 
         except Exception as e:
             log_error(e, f"Error parsing serial data: {e}")

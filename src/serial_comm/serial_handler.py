@@ -42,7 +42,7 @@ class SerialHandler:
         self.last_ports_check = 0
         self.ports_check_interval = 2  # seconds between port availability checks
 
-        # NEW: Device configuration
+        # Device configuration
         self.slider_count = 0
         self.button_count = 0
         self.config_request = "GET_CONFIG"
@@ -345,6 +345,16 @@ class SerialHandler:
         overlapped = pywintypes.OVERLAPPED()
         overlapped.hEvent = win32event.CreateEvent(None, 0, 0, None)
 
+        # Initialize COM for this thread if on Windows
+        if WINDOWS_AVAILABLE:
+            try:
+                import comtypes
+                comtypes.CoInitialize()
+            except ImportError:
+                pass
+            except Exception as e:
+                log_error(e, "Failed to initialize COM in serial read thread")
+
         while self.reading and self.is_connected():
             try:
                 # Try to read data with overlapped I/O
@@ -369,13 +379,10 @@ class SerialHandler:
 
             except pywintypes.error as e:
                 error_code = e.args[0]
-
-                # Handle physical disconnection - including error 995
                 if error_code in (5, 22, 995, 1167):
                     print("Device disconnected - starting automatic reconnection")
                     self._handle_physical_disconnect()
                     break
-
                 log_error(e, f"Error reading from serial port (error {error_code})")
                 time.sleep(0.1)
 
@@ -531,49 +538,12 @@ class SerialHandler:
                     print(f"✓ Configuration received: {self.slider_count} sliders, {self.button_count} buttons")
                 return
 
-            # Handle button data immediately (now using "Button X" format)
-            if clean_data.startswith('Button '):
-                parts = clean_data.split()
-                if len(parts) == 3 and parts[2] in ('0', '1'):
-                    # Convert to internal format for compatibility
-                    button_num = parts[1]
-                    internal_format = f"b{button_num} {parts[2]}"
-                    for callback in self.callbacks:
-                        callback(internal_format)
-                return
-
-            # Handle slider data (pipe-separated format with "Slider X" format)
-            if '|' not in clean_data:
-                return
-
-            # Validate slider data format and convert to internal format
-            parts = clean_data.split('|')
-            valid_data = True
-            converted_parts = []
-
-            for part in parts:
-                if not part.strip():
-                    continue
-                try:
-                    # Parse "Slider X value" format
-                    sub_parts = part.strip().split()
-                    if len(sub_parts) == 3 and sub_parts[0] == 'Slider' and sub_parts[2].isdigit():
-                        slider_num = sub_parts[1]
-                        value = sub_parts[2]
-                        # Convert to internal format for compatibility
-                        converted_parts.append(f"s{slider_num} {value}")
-                    else:
-                        valid_data = False
-                        break
-                except ValueError:
-                    valid_data = False
-                    break
-
-            if valid_data and converted_parts:
-                # Rebuild data in internal format for callbacks
-                internal_data = '|'.join(converted_parts)
-                for callback in self.callbacks:
-                    callback(internal_data)
+            # Pass raw data to callbacks for parsing
+            for callback in self.callbacks:
+                # We pass the raw clean_data. The parser in AudioManager will handle it.
+                # Note: The previous implementation did some pre-parsing here. 
+                # We are moving that to DataParser, so we just pass the raw string.
+                callback(clean_data)
 
         except Exception as e:
             log_error(e, "Error processing serial data")
