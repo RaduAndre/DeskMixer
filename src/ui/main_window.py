@@ -22,18 +22,24 @@ IPC_MESSAGE = b"SHOW_WINDOW"
 class VolumeControllerUI:
     """Main application window with tabbed interface"""
 
-    def __init__(self, root):
+    def __init__(self, root, core_controller):
         self.root = root
+        self.core = core_controller
         self.tray_icon = None
         self.running = True
         self.ipc_server = None
 
-        # Initialize config manager early
-        self.config_manager = ConfigManager()
+        # Use managers from core
+        self.config_manager = self.core.config_manager
+        self.audio_manager = self.core.audio_manager
+        # Window monitor is currently in UI but should probably be in core too
+        # For now we'll keep it here or move it to core if we want full separation
+        # Let's initialize it here for now as it's UI related (focus tracking)
+        self.window_monitor = WindowMonitor()
 
         try:
             self._initialize_window()
-            self._initialize_managers()
+            # self._initialize_managers() # Removed, using core
             self._create_ui()
             self._start_monitoring()
             self._setup_tray_icon()
@@ -92,15 +98,6 @@ class VolumeControllerUI:
 
         self.root.minsize(800, 600)
 
-    def _initialize_managers(self):
-        """Initialize audio and window managers"""
-        try:
-            self.audio_manager = AudioManager()
-            self.window_monitor = WindowMonitor()
-        except Exception as e:
-            handle_error(e, "Failed to initialize managers")
-            raise
-
     def _create_ui(self):
         """Create the tabbed user interface"""
         try:
@@ -135,7 +132,8 @@ class VolumeControllerUI:
             self.notebook.pack(fill="both", expand=True)
 
             # Create tabs
-            self.config_tab = ConfigTab(self.notebook, self.audio_manager)
+            # Create tabs
+            self.config_tab = ConfigTab(self.notebook, self.core)
             self.serial_tab = SerialMonitorTab(self.notebook, self.audio_manager.serial_handler)
 
             # Add tabs to notebook
@@ -279,9 +277,9 @@ class VolumeControllerUI:
 
             # Cleanup and close
             self.running = False
-
-            if hasattr(self, 'audio_manager'):
-                self.audio_manager.cleanup()
+            
+            if self.core:
+                self.core.stop()
 
             # Close IPC server
             if self.ipc_server:

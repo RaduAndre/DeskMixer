@@ -27,3 +27,5 @@ PyInstaller/Nuika/spec files (used for creating executables)
 
 src/build/build_files
 src/build/dist
+UI_DEVELOPER_GUIDE.md
+UI_INSTRUCTIONS.md

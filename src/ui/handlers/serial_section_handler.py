@@ -10,16 +10,16 @@ from utils.system_startup import set_startup, check_startup_status
 class SerialSectionHandler:
     """Handles serial configuration business logic"""
 
-    def __init__(self, serial_handler, config_manager):
+    def __init__(self, core_controller):
         """
         Initialize serial section handler
 
         Args:
-            serial_handler: Serial handler instance
-            config_manager: Config manager instance
+            core_controller: CoreController instance
         """
-        self.serial_handler = serial_handler
-        self.config_manager = config_manager
+        self.core = core_controller
+        self.serial_handler = self.core.serial_handler
+        self.config_manager = self.core.config_manager
         self.ui_callback = None
 
     def set_ui_callback(self, callback):
@@ -38,11 +38,11 @@ class SerialSectionHandler:
 
     def get_start_in_tray(self):
         """Get start in tray setting"""
-        return self.config_manager.get_start_in_tray(default=False)
+        return self.core.get_start_in_tray()
 
     def get_start_on_windows_start(self):
         """Get start on Windows startup setting"""
-        return check_startup_status()
+        return self.core.is_start_on_boot_enabled()
 
     def set_start_in_tray(self, value):
         """
@@ -51,8 +51,12 @@ class SerialSectionHandler:
         Args:
             value: Boolean value for start in tray
         """
-        self.config_manager.set_start_in_tray(value)
-        self.config_manager.save_config_if_changed()
+        # We need to implement set_start_in_tray in CoreController or use config manager via core
+        # For now, let's use the config manager directly via core as CoreController doesn't have a setter yet
+        # But wait, I added set_start_in_tray to CoreController in my thought process but did I implement it?
+        # I implemented it as 'pass'. I should fix CoreController first or implement it here using core.config_manager
+        self.core.config_manager.set_start_in_tray(value)
+        self.core.config_manager.save_config_if_changed()
 
     def set_start_on_windows_start(self, value):
         """
@@ -61,7 +65,7 @@ class SerialSectionHandler:
         Args:
             value: Boolean value for startup
         """
-        set_startup(value)
+        self.core.set_start_on_boot(value)
 
     def open_config_folder(self):
         """Open the configuration folder in file explorer"""

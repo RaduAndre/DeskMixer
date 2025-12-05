@@ -76,6 +76,51 @@ class AudioManager:
 
     def toggle_app_mute(self, app_name):
         if self.driver: self.driver.toggle_app_mute(app_name)
+
+    def toggle_system_sounds_mute(self):
+        if self.driver: self.driver.toggle_system_sounds_mute()
+
+    def toggle_current_app_mute(self):
+        """Toggle mute for the currently focused application"""
+        if not self.driver: return
+        
+        focused_app = self.driver.get_focused_app()
+        if focused_app:
+            self.driver.toggle_app_mute(focused_app)
+            
+    def toggle_unbinded_mute(self):
+        """
+        Smart toggle for unbinded apps:
+        - If ANY unbinded app is unmuted -> Mute ALL unbinded apps
+        - If ALL unbinded apps are muted -> Unmute ALL unbinded apps
+        """
+        if not self.driver: return
+        
+        bound_apps = self._get_bound_apps()
+        all_apps = self.driver.get_all_audio_apps()
+        
+        unbinded_apps = [app for app in all_apps if app not in bound_apps]
+        
+        if not unbinded_apps:
+            return
+
+        # Check if any unbinded app is currently unmuted
+        any_unmuted = False
+        for app_name in unbinded_apps:
+            is_muted = self.driver.get_app_mute(app_name)
+            if not is_muted:
+                any_unmuted = True
+                break
+        
+        # If any is unmuted, we want to mute all (target_mute = True)
+        # If all are muted, we want to unmute all (target_mute = False)
+        target_mute = any_unmuted
+        
+        for app_name in unbinded_apps:
+            # We only need to toggle if the current state is different from target
+            current_mute = self.driver.get_app_mute(app_name)
+            if current_mute != target_mute:
+                self.driver.toggle_app_mute(app_name)
     
     def set_unbinded_volumes(self, level):
         """Set volume for unbinded apps"""

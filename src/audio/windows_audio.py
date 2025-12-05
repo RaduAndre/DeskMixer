@@ -354,6 +354,39 @@ class WindowsAudioDriver(AudioDriver):
                 return success_count > 0
         return False
 
+    def get_app_mute(self, app_name):
+        """Get mute state for a specific application"""
+        if app_name in self.app_sessions:
+            sessions = self.app_sessions[app_name]
+            if len(sessions) > 0:
+                def get_mute_operation():
+                    return sessions[0].GetMute()
+                
+                return self._safe_com_operation(get_mute_operation, f"get mute {app_name}", default_return=False)
+        return False
+
+    def toggle_system_sounds_mute(self):
+        """Toggle mute for system sounds"""
+        def toggle_sys_mute_operation():
+            if self.system_sounds_session:
+                current = self.system_sounds_session.GetMute()
+                self.system_sounds_session.SetMute(not current, None)
+                return True
+            
+            # Try to refresh if session is missing
+            if self._refresh_system_sounds_session():
+                current = self.system_sounds_session.GetMute()
+                self.system_sounds_session.SetMute(not current, None)
+                return True
+                
+            return False
+
+        return self._safe_com_operation(
+            toggle_sys_mute_operation, 
+            "toggle system sounds mute", 
+            default_return=False
+        )
+
     def get_all_audio_apps(self):
         apps = {}
         self.app_sessions.clear()

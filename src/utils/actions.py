@@ -385,10 +385,30 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
     def mute(self, **kwargs):
         """Toggle mute"""
         try:
-            if self.audio_manager:
+            if not self.audio_manager:
+                return False
+
+            target = kwargs.get('target', 'Master')
+            
+            # Handle empty target as Master
+            if not target or target == "None":
+                target = "Master"
+
+            if target == "Master":
                 self.audio_manager.toggle_master_mute()
-                return True
-            return False
+            elif target == "Microphone":
+                self.audio_manager.toggle_mic_mute()
+            elif target == "System Sounds":
+                self.audio_manager.toggle_system_sounds_mute()
+            elif target == "Current Application":
+                self.audio_manager.toggle_current_app_mute()
+            elif target == "Unbinded":
+                self.audio_manager.toggle_unbinded_mute()
+            else:
+                # Specific app
+                self.audio_manager.toggle_app_mute(target)
+                
+            return True
         except Exception as e:
             log_error(e, "Error in mute")
             return False
@@ -446,6 +466,10 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
                     "Cannot execute keybind"
                 )
                 return False
+            
+            import keyboard
+            keyboard.press_and_release(keys)
+            return True
 
         except Exception as e:
             log_error(e, f"Error pressing keybind: {keys}")

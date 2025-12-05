@@ -10,6 +10,7 @@ try:
 except ImportError:
     HAS_WIN32_MUTEX = False
 
+from core.core_controller import CoreController
 from ui.main_window import VolumeControllerUI
 from utils.error_handler import setup_error_handling, log_error
 
@@ -39,14 +40,15 @@ def run_app():
     root = tk.Tk()
     root.withdraw()  # Start with the window hidden initially
 
+    # Initialize Core Controller
+    core = CoreController()
+    core.start()
+
     # Initialize the UI (it will handle tray icon and IPC)
-    ui_app = VolumeControllerUI(root)
+    ui_app = VolumeControllerUI(root, core)
 
     # Determine if we should start hidden based on config
-    if hasattr(ui_app.config_tab, 'serial_section') and ui_app.config_tab.serial_section:
-        start_hidden = ui_app.config_tab.serial_section.start_in_tray.get()
-    else:
-        start_hidden = ui_app.config_manager.get_start_in_tray(default=False)
+    start_hidden = core.get_start_in_tray()
 
     if not start_hidden:
         ui_app.root.after(100, ui_app.show_window)

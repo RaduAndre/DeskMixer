@@ -17,11 +17,12 @@ from ui.config_button_section import ConfigButtonSection
 class ConfigTab:
     """Configuration tab UI - now an orchestrator for its sections."""
 
-    def __init__(self, parent, audio_manager):
-        self.audio_manager = audio_manager
+    def __init__(self, parent, core_controller):
+        self.core = core_controller
+        self.audio_manager = self.core.audio_manager
         self.frame = tk.Frame(parent, bg="#1e1e1e")
-        self.config_manager = ConfigManager()
-        self.serial_handler = SerialHandler(config_manager=self.config_manager)
+        self.config_manager = self.core.config_manager
+        self.serial_handler = self.core.serial_handler
         self.unsaved_changes = False  # Keep unsaved_changes for older checks
 
         # NEW: Initialize helpers
@@ -46,7 +47,7 @@ class ConfigTab:
         # Bind resize event
         self.frame.bind('<Configure>', self._on_resize)
 
-        self.audio_manager.set_handlers(self.serial_handler, self.config_manager)
+        # self.audio_manager.set_handlers(self.serial_handler, self.config_manager) # Done in core
 
     def _on_resize(self, event):
         """Handle window resize events"""
@@ -77,8 +78,7 @@ class ConfigTab:
 
             # Serial Port Section - REFACTORED
             serial_handler = SerialSectionHandler(
-                self.serial_handler,
-                self.config_manager
+                self.core
             )
             self.serial_section = SerialSectionUI(
                 main_container,
