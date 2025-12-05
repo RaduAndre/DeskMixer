@@ -29,6 +29,11 @@ A physical volume mixer with programmable buttons for Windows, inspired by [Deej
 ![DeskMixer UI](images/ui-screenshot.png)
 *The interface is fully scalable - add as many sliders and buttons as your hardware supports!*
 
+I'm working on a new ui, for now I just have the mockups, this is the initial design.
+![DeskMixer UI2](src/ui2/mockups/main.png)
+![DeskMixer UI2](src/ui2/mockups/main+menu.png)
+
+
 ### DIY Hardware Build
 ![DeskMixer Hardware](images/hardware-image.jpg)
 *A functional, handcrafted build - proving that professional results don't require a professional workshop!*
