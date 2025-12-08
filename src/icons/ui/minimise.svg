@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 3">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #757575;
+        stroke: #757575;
+        stroke-miterlimit: 10;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1-2" data-name="Layer 1">
+    <g id="top_bar" data-name="top bar">
+      <g id="window_actions" data-name="window actions">
+        <rect class="cls-1" x=".5" y=".5" width="9" height="2" rx="1" ry="1"/>
+      </g>
+    </g>
+  </g>
+</svg>
