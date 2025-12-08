@@ -18,6 +18,7 @@ class ActionButton(QPushButton):
     
     # Signal emitted when dropped: source_index, target_index
     dropped = Signal(int, int) 
+    variableChanged = Signal(dict)
     
     def __init__(self, icon_name: str, text: str, index: int = -1, parent=None):
         super().__init__(parent)
@@ -36,7 +37,10 @@ class ActionButton(QPushButton):
         self.setAcceptDrops(True) # Accept drops
         
         self.setup_ui()
-        self.set_variable("None") # Initialize with None state
+        # Initialize with None state but don't emit yet?
+        # Manually set to avoid signal during init if usually preferred, 
+        # but safely initializing via internal method or just careful connection usage.
+        self._set_variable_internal("None") 
     
     def setup_ui(self):
         """Setup button UI with icon and text - vertical layout."""
@@ -64,6 +68,10 @@ class ActionButton(QPushButton):
         
     def set_variable(self, value: str, argument: str = None, argument2: str = None):
         """Set the active variable for the button."""
+        self._set_variable_internal(value, argument, argument2)
+        self.variableChanged.emit(self.active_variable)
+
+    def _set_variable_internal(self, value: str, argument: str = None, argument2: str = None):
         if value is None or value == "None":
             self.active_variable = None
             self.icon_name = "ghost.svg"
@@ -108,6 +116,7 @@ class ActionButton(QPushButton):
         # User requested: "default color ... white and on active ... black"
         icon = icon_manager.get_colored_icon(self.icon_name, target_color)
         
+        # Create a square pixmap to ensure centering
         # Create a square pixmap to ensure centering
         size = 24
         pixmap = QPixmap(size, size)

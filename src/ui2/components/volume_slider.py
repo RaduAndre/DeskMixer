@@ -119,8 +119,8 @@ class VolumeSlider(QWidget):
     
     clicked = Signal()  # Signal when slider is clicked (for menu opening)
     valueChanged = Signal(int)  # Signal when value changes
-    # Signal emitted when dropped: source_index, target_index
-    dropped = Signal(int, int)
+    dropped = Signal(int, int) # Signal emitted when dropped
+    variableChanged = Signal(list) # Signal when variable changes
     
     def __init__(self, name: str = "Volume", index: int = -1, parent=None):
         super().__init__(parent)
@@ -140,15 +140,26 @@ class VolumeSlider(QWidget):
         self.setup_ui()
         self.update_label() # Initial label update
         
+    def set_variables(self, variables: list):
+        """Set multiple variables (list of strings or dicts)."""
+        self.active_variables = []
+        for var in variables:
+            if isinstance(var, dict):
+                self.active_variables.append(var)
+            elif isinstance(var, str):
+                self.active_variables.append({'value': var, 'argument': None})
+        self.update_label()
+        self.variableChanged.emit(self.active_variables)
+
     def add_variable(self, value: str, argument: str = None):
         """Add a variable to the slider."""
         # Check if already exists
-        for var in self.active_variables:
-            if var['value'] == value and var['argument'] == argument:
-                return # Already exists
+        if self.has_variable(value, argument):
+            return
         
         self.active_variables.append({'value': value, 'argument': argument})
         self.update_label()
+        self.variableChanged.emit(self.active_variables)
         
     def remove_variable(self, value: str, argument: str = None):
         """Remove a variable from the slider."""
@@ -157,16 +168,11 @@ class VolumeSlider(QWidget):
             if not (var['value'] == value and var['argument'] == argument)
         ]
         self.update_label()
+        self.variableChanged.emit(self.active_variables)
         
     def toggle_variable(self, value: str, argument: str = None):
         """Toggle a variable."""
-        exists = False
-        for var in self.active_variables:
-            if var['value'] == value and var['argument'] == argument:
-                exists = True
-                break
-        
-        if exists:
+        if self.has_variable(value, argument):
             self.remove_variable(value, argument)
         else:
             self.add_variable(value, argument)
@@ -189,14 +195,46 @@ class VolumeSlider(QWidget):
             # Use argument if present, else value
             # e.g. Mute -> Microphone: "Microphone"
             # e.g. Master: "Master"
-            if var.get('argument'):
-                parts.append(var['argument'])
-            else:
-                parts.append(var['value'])
+            arg = var.get('argument')
+            val = var.get('value')
+            
+            if arg:
+                parts.append(arg)
+            elif val:
+                parts.append(val)
         
-        # Space separated as requested "Master Microphone"
-        text = " ".join(parts)
-        self.name_label.setText(text)
+        if not parts:
+            self.name_label.setText("None")
+        else:
+            # Space separated as requested "Master Microphone"
+            text = " ".join(parts)
+            self.name_label.setText(text)
+            
+            # Auto-shrink font logic for single words
+            # Reset font first
+            font = self.name_label.font()
+            font.setPointSize(fonts.SLIDER_NAME_SIZE) # Default size
+            self.name_label.setFont(font)
+            
+            if len(parts) == 1:
+                # Single word - enable auto-shrink
+                from PySide6.QtGui import QFontMetrics
+                
+                # Available width (90px fixed width - padding)
+                # Padding defined in stylesheet is 5px (left+right = 10px)
+                # Border 1px * 2 = 2px
+                available_width = 90 - 12 
+                
+                fm = QFontMetrics(font)
+                while fm.horizontalAdvance(text) > available_width and font.pointSize() > 6:
+                    font.setPointSize(font.pointSize() - 1)
+                    fm = QFontMetrics(font)
+                
+                self.name_label.setFont(font)
+            else:
+                 # Multi-word - ensure word wrap is ON (already set in setup_ui)
+                 # and font is default
+                 pass
 
     def setup_ui(self):
         """Setup the UI components."""

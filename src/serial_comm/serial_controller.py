@@ -90,7 +90,8 @@ class SerialController:
 
             # Handle Sliders - Direct Update
             if parsed_event.sliders and self.config_manager:
-                config = self.config_manager.load_config()
+                # Use cached config - ConfigManager is singleton and updated by UI
+                config = self.config_manager.config
                 bindings = config.get('variable_bindings', {})
                 slider_sampling = self.config_manager.get_slider_sampling()
 
@@ -120,6 +121,14 @@ class SerialController:
             targets = [targets]
 
         for target in targets:
+            # Handle new binding structure (list of dicts)
+            if isinstance(target, dict):
+                # Check for 'value' (new format) or 'app_name' (possible legacy/other format)
+                target = target.get('value') or target.get('app_name')
+            
+            if not target:
+                continue
+
             if target == "Master":
                 self.audio_manager.set_master_volume(value)
             elif target == "Microphone":
@@ -162,7 +171,8 @@ class SerialController:
             if not self.config_manager:
                 return
 
-            config = self.config_manager.load_config()
+            # Use cached config
+            config = self.config_manager.config
             binding = config.get('button_bindings', {}).get(button_id)
 
             if not binding:
@@ -174,6 +184,10 @@ class SerialController:
             app_path = binding.get('app_path')
             output_mode = binding.get('output_mode')
             output_device = binding.get('output_device')
+            
+            # New generic structure
+            value = binding.get('value')
+            argument = binding.get('argument')
 
             # Use the action handler instance
             kwargs = {}
@@ -182,6 +196,10 @@ class SerialController:
             if app_path: kwargs['app_path'] = app_path
             if output_mode: kwargs['output_mode'] = output_mode
             if output_device: kwargs['device_name'] = output_device
+            
+            # Pass generic values
+            if value: kwargs['value'] = value
+            if argument: kwargs['argument'] = argument
 
             self.action_handler.execute_action(action, **kwargs)
 

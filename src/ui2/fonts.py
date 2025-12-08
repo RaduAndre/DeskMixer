@@ -14,6 +14,9 @@ from ui2 import colors
 FONT_FAMILY = "Montserrat"
 FALLBACK_FONT = "Segoe UI"
 
+# Font Sizes
+SLIDER_NAME_SIZE = 12
+
 def get_font(size: int, bold: bool = False) -> QFont:
     """Create a QFont with the specified size and weight."""
     font = QFont(FONT_FAMILY)

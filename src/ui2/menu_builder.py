@@ -21,8 +21,9 @@ from ui2.icon_manager import icon_manager # For consistent action names if neede
 class MenuBuilder:
     """Helper class for building menu content."""
     
-    def __init__(self, content_layout: QVBoxLayout):
+    def __init__(self, content_layout: QVBoxLayout, audio_manager=None):
         self.content_layout = content_layout
+        self.audio_manager = audio_manager
         self.menu_items = []
         self.sections = {}  # Track sections and their items
         self.current_section = None
@@ -345,9 +346,10 @@ class MenuBuilder:
         selected_item.set_selected(True)
         for item in other_items:
             item.set_selected(False)
-        # Notify if needed (not requested yet, but good practice if it affects live audio logic)
-        # Probably needs to update AudioManager? 
-        # For now, just persisting setting.
+            
+        # Update live variable in AudioManager as requested
+        if self.audio_manager:
+            self.audio_manager.set_slider_sampling(mode)
     
     def build_slider_menu(self, target_slider):
         """Build the slider configuration menu content."""
@@ -369,13 +371,35 @@ class MenuBuilder:
         add_toggle_item("System sounds", "System sounds")
         add_toggle_item("Focused application", "Focused application")
         add_toggle_item("Unbound", "Unbound")
-
         
         self.add_head("Active sounds", expandable=True, expanded=True)
-        # Dynamic active sounds would go here
-        add_toggle_item("Chrome", "Chrome")
-        add_toggle_item("Spotify", "Spotify")
-        add_toggle_item("Discord", "Discord")
+        # Dynamic active sounds
+        if self.audio_manager:
+            try:
+                 active_apps = self.audio_manager.get_all_audio_apps()
+                 # active_apps might be a list of strings or dicts, depending on WindowsAudioDriver
+                 # Based on AudioManager.get_all_audio_apps() -> returns driver.get_all_audio_apps()
+                 # Typically returns a list of names.
+                 
+                 found_any = False
+                 for app_name in active_apps:
+                     if app_name in ["Master", "System Sounds", "Microphone"]:
+                         continue # Already in General
+                     add_toggle_item(app_name, app_name)
+                     found_any = True
+                     
+                 if not found_any:
+                     self.add_item("No active apps found", level=0)
+            except Exception as e:
+                print(f"Error fetching active apps: {e}")
+                self.add_item("Error fetching apps", level=0)
+        else:
+             self.add_item("Audio Service Unavailable", level=0)
+        
+        # Static placeholders removed/replaced by dynamic logic
+        # add_toggle_item("Chrome", "Chrome")
+        # add_toggle_item("Spotify", "Spotify")
+        # add_toggle_item("Discord", "Discord")
         
         self.add_head("Other applications", expandable=True, expanded=True)
         self.add_item("Select other applications") # Placeholder

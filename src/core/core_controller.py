@@ -14,7 +14,7 @@ class CoreController:
     def __init__(self):
         self.config_manager = ConfigManager()
         self.audio_manager = AudioManager()
-        self.serial_handler = SerialHandler()
+        self.serial_handler = SerialHandler(self.config_manager)
         
         # Connect components
         self.audio_manager.set_handlers(self.serial_handler, self.config_manager)
@@ -27,7 +27,11 @@ class CoreController:
         try:
             # Serial handler is started by AudioManager -> SerialController
             # But we can ensure everything is ready here
-            pass
+            # Start connection process
+            if self.serial_handler:
+                import threading
+                connection_thread = threading.Thread(target=self.serial_handler.auto_connect, daemon=True)
+                connection_thread.start()
         except Exception as e:
             log_error(e, "Error starting CoreController")
 

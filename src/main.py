@@ -1,4 +1,4 @@
-import tkinter as tk
+
 import sys
 
 # Windows-specific imports for single instance check
@@ -11,7 +11,7 @@ except ImportError:
     HAS_WIN32_MUTEX = False
 
 from core.core_controller import CoreController
-from ui.main_window import VolumeControllerUI
+
 from utils.error_handler import setup_error_handling, log_error
 
 # Constants
@@ -21,6 +21,21 @@ SINGLE_INSTANCE_MUTEX_NAME = "Global\\DeskMixer_SingleInstanceMutex"
 def run_app():
     """Main application entry point"""
 
+    # Windows-specific imports for single instance check
+    import win32gui
+    import win32con
+    import os
+    
+    # High DPI Scaling Fix
+    # Use System DPI Aware (1) instead of Per Monitor (2) to prevent coordinate snapping/jumping
+    # when dragging between screens with different scaling.
+    if os.name == 'nt':
+        try:
+            from ctypes import windll
+            windll.shcore.SetProcessDpiAwareness(1) 
+        except Exception:
+            pass
+
     # Check for a single instance using a named Mutex (Windows only)
     mutex = None
     if HAS_WIN32_MUTEX:
@@ -29,34 +44,66 @@ def run_app():
 
             if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
                 print("Another instance of DeskMixer is already running. Bringing it to focus.")
+                
+                # Find the existing window
+                hwnd = win32gui.FindWindow(None, "DeskMixer")
+                if hwnd:
+                    # Restore if minimized
+                    if win32gui.IsIconic(hwnd):
+                        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+                    
+                    # Bring to front
+                    win32gui.SetForegroundWindow(hwnd)
+                
                 win32api.CloseHandle(mutex)
-                # Try to notify the existing instance
-                VolumeControllerUI.notify_existing_instance()
                 sys.exit(0)
         except Exception as e:
             log_error(e, "Error during single instance check; proceeding without mutex protection.")
 
-    # Initialize Tkinter
-    root = tk.Tk()
-    root.withdraw()  # Start with the window hidden initially
+    # Initialize PySide6 Application
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import Qt
+
+    # Create QApplication before any widget
+    app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False) # For tray icon to keep app running
 
     # Initialize Core Controller
     core = CoreController()
     core.start()
 
-    # Initialize the UI (it will handle tray icon and IPC)
-    ui_app = VolumeControllerUI(root, core)
+    # Import and Initialize the UI2 Main Window
+    # Doing this after QApplication ensures Qt is ready
+    from ui2.main_window import MainWindow
+    
+    # We might need to pass core to MainWindow eventually, 
+    # but for now MainWindow uses global singletons or internal logic.
+    # The plan assumes direct instantiation.
+    main_window = MainWindow(audio_manager=core.audio_manager)
+
+    # Bridge SerialHandler status updates to MainWindow
+    def status_bridge(status, message):
+        main_window.status_update_signal.emit(status, message)
+    
+    if core.serial_handler:
+        core.serial_handler.add_status_callback(status_bridge)
 
     # Determine if we should start hidden based on config
+    # Core uses ConfigManager, which is what we want.
     start_hidden = core.get_start_in_tray()
 
     if not start_hidden:
-        ui_app.root.after(100, ui_app.show_window)
+        main_window.show()
     else:
-        ui_app.root.after(100, ui_app.hide_window)
+        # Just ensure tray is visible (MainWindow handles tray mostly in setup_tray_icon)
+        # If start hidden, we just don't show the window.
+        pass
 
-    # Start the main UI loop
-    root.mainloop()
+    # Start the event loop
+    exit_code = app.exec()
+    
+    # Core cleanup
+    core.stop()
 
     # Release the mutex when the app closes
     if mutex and HAS_WIN32_MUTEX:
@@ -64,6 +111,8 @@ def run_app():
             win32api.CloseHandle(mutex)
         except Exception as e:
             log_error(e, "Error releasing mutex on shutdown")
+            
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

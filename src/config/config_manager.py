@@ -13,9 +13,22 @@ def get_app_data_folder():
 
 
 class ConfigManager:
-    """Manage configuration settings"""
+    """
+    Manage configuration settings.
+    Singleton pattern to ensure global access to the same state.
+    """
+    _instance = None
+    _initialized = False
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(ConfigManager, cls).__new__(cls)
+        return cls._instance
 
     def __init__(self, config_file="config.json"):
+        if self._initialized:
+            return
+            
         self.config_file = config_file
 
         # Use Documents/DeskMixer folder for configuration
@@ -31,9 +44,11 @@ class ConfigManager:
 
         # Load configuration on initialization
         self.load_config()
+        self._initialized = True
 
     def load_config(self):
         """Load configuration from file"""
+        self.load_failed = False
         try:
             if os.path.exists(self.config_path):
                 with open(self.config_path, 'r') as f:
@@ -42,7 +57,20 @@ class ConfigManager:
                 self.config = {}
         except Exception as e:
             log_error(e, f"Error loading configuration from {self.config_path}")
+            self.load_failed = True
             self.config = {}
+            
+            # Backup corrupted file
+            try:
+                import shutil
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                backup_path = f"{self.config_path}.corrupted_{timestamp}.json"
+                shutil.copy2(self.config_path, backup_path)
+                print(f"Backed up corrupted config to {backup_path}")
+            except Exception as backup_error:
+                log_error(backup_error, "Failed to backup corrupted config")
+                
         return self.config
 
     def save_config(self):
@@ -75,18 +103,35 @@ class ConfigManager:
             elif not isinstance(app_names, list):
                 app_names = []
 
-            # Filter out empty values
-            app_names = [app for app in app_names if app]
-
-            # Default to Master if empty
+            # Filter out empty values but keep "None" if strictly intended? 
+            # Actually user wants "None" to result in the null object.
+            
+            # Check for explicit "None" or empty
+            is_none = False
             if not app_names:
-                app_names = ['Master']
+                is_none = True
+            elif len(app_names) == 1 and (app_names[0] == "None" or app_names[0] is None):
+                is_none = True
+            
+            if is_none:
+                # User requested specific format for None
+                app_names = [{"value": None, "argument": None}]
+            else:
+                 # Filter valid apps
+                 app_names = [app for app in app_names if app and app != "None"]
+                 if not app_names:
+                     app_names = [{"value": None, "argument": None}]
 
             # Check if binding actually changed
             current = self.config['variable_bindings'].get(var_name)
 
             # Normalize current for comparison
+            # Current might be legacy list of strings OR new list of dicts
+            current_apps = []
             if isinstance(current, dict):
+                # Legacy special structure? Or just dict access
+                # If it's the new style, it's simple list of dicts stored directly
+                # If it's old style dict with 'app_name' key?
                 current_apps = current.get('app_name', [])
                 if isinstance(current_apps, str):
                     current_apps = [current_apps]
@@ -94,10 +139,20 @@ class ConfigManager:
                 current_apps = current
             elif isinstance(current, str):
                 current_apps = [current]
-            else:
-                current_apps = []
+            
+            # Comparison Logic
+            changed = False
+            try:
+                # Try set comparison (for strings/numbers) - ignores order
+                if set(current_apps) != set(app_names):
+                    changed = True
+            except TypeError:
+                # Fallback for unhashable types (e.g. dicts) - sensitive to order
+                # Use simple equality for lists of dicts
+                if current_apps != app_names:
+                    changed = True
 
-            if set(current_apps) != set(app_names):
+            if changed:
                 self.config['variable_bindings'][var_name] = app_names
                 self.has_changes = True
                 self.save_config()

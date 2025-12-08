@@ -388,7 +388,13 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             if not self.audio_manager:
                 return False
 
-            target = kwargs.get('target', 'Master')
+            if not self.audio_manager:
+                return False
+
+            # Support generic value/argument structure
+            target = kwargs.get('target')
+            if not target:
+                 target = kwargs.get('value') or kwargs.get('argument') or 'Master'
             
             # Handle empty target as Master
             if not target or target == "None":
@@ -432,6 +438,10 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
                 get_device_names
             )
 
+            # Support generic binding structure
+            if not device_name:
+                device_name = kwargs.get('value') or kwargs.get('argument')
+                
             if output_mode == "cycle":
                 return cycle_audio_device()
 
@@ -467,7 +477,16 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
                 )
                 return False
             
+
             import keyboard
+            
+            # Support generic binding structure
+            if not keys:
+                keys = kwargs.get('value') or kwargs.get('argument')
+                
+            if not keys:
+                return False
+                
             keyboard.press_and_release(keys)
             return True
 
@@ -478,6 +497,10 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
     def launch_app(self, app_path=None, **kwargs):
         """Launch an application by path or name"""
         try:
+            # Support generic binding structure
+            if not app_path:
+                app_path = kwargs.get('value') or kwargs.get('argument')
+                
             if not app_path:
                 log_error(ValueError("No app path provided"), "Cannot launch app")
                 return False

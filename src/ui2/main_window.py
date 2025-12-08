@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QLabel, QPushButton, QScrollArea, QGridLayout,
                                QSystemTrayIcon, QMenu)
-from PySide6.QtCore import Qt, QPoint, QPropertyAnimation, QEasingCurve, QRect, QSize
+from PySide6.QtCore import Qt, QPoint, QPropertyAnimation, QEasingCurve, QRect, QSize, Signal
 from PySide6.QtGui import QIcon
 
 from ui2.components.volume_slider import VolumeSlider
@@ -27,14 +27,19 @@ from ui2 import colors, fonts
 class MainWindow(QMainWindow):
     """Main application window."""
     
-    def __init__(self):
+    # Signal for thread-safe status updates
+    status_update_signal = Signal(str, str)
+    
+    def __init__(self, audio_manager=None):
         super().__init__()
+        self.audio_manager = audio_manager
         
         # Window setup
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.resize(1000, 600)
         self.setMinimumSize(800, 500)
+        self.setWindowTitle("DeskMixer") # Critical for FindWindow
         
         # State
         self._drag_pos = None
@@ -46,8 +51,45 @@ class MainWindow(QMainWindow):
         self.slider_count = 4 
         self.button_count = 6
         
+        # Connect signals
+        self.status_update_signal.connect(self.on_status_update)
+        
         self.setup_ui()
         self.setup_tray_icon()
+        
+    def on_status_update(self, status: str, message: str):
+        """Handle status update from background thread."""
+        # Map SerialHandler status to UI status
+        status_map = {
+            "connected": ("Connected", colors.STATUS_CONNECTED), # Green
+            "connecting": ("Trying to connect", "#FFA500"),      # Orange/Yellow
+            "reconnecting": ("Trying to connect", "#FFA500"),    # Orange/Yellow
+            "disconnected": ("Disconnected", colors.STATUS_DISCONNECTED) # Red
+        }
+        
+        ui_status, color = status_map.get(status.lower(), ("Disconnected", colors.STATUS_DISCONNECTED))
+        
+        # User requested verifying specific text changes only, not style
+        # But subsequently clarified "make the ui change the style of the status so if its disconnected red trying to connect or reconnecting yellow and connected green"
+        
+        # Apply Text
+        self.status_label.setText(ui_status)
+        
+        # Apply Color (Update stylesheet for color only, preserving other font settings)
+        current_style = self.status_label.styleSheet()
+        # We need to construct a new style with the correct color
+        # Since we use a function in setup_ui but modified it previously?
+        # Let's just set the specific style properties we know.
+        
+        self.status_label.setStyleSheet(f"""
+            QLabel {{
+                color: {color};
+                font-size: 15px;
+                font-family: Montserrat, Segoe UI;
+                background: transparent;
+                border: none;
+            }}
+        """)
     
     def setup_ui(self):
         """Setup the main UI."""
@@ -90,7 +132,8 @@ class MainWindow(QMainWindow):
         self.btn_minimize.clicked.connect(self.hide)
         
         self.btn_close = self.create_icon_button("close.svg", 12)
-        self.btn_close.clicked.connect(self.close)
+        # User requested explicitly initiating program closing
+        self.btn_close.clicked.connect(QApplication.quit)
         
         controls_layout.addWidget(self.btn_minimize)
         controls_layout.addSpacing(8)
@@ -138,6 +181,8 @@ class MainWindow(QMainWindow):
         
         self.main_layout.addWidget(body, 1)
     
+    # ... (previous code)
+    
     def setup_controllers(self):
         """Setup the controllers area with sliders and buttons."""
         self.controllers_area = QWidget()
@@ -178,10 +223,10 @@ class MainWindow(QMainWindow):
             }}
         """)
         
-        self.status_label = QLabel("Connected")
+        self.status_label = QLabel("Disconnected") # Default to disconnected
         self.status_label.setStyleSheet(f"""
             QLabel {{
-                color: {colors.STATUS_CONNECTED};
+                color: {colors.STATUS_DISCONNECTED};
                 font-size: 15px;
                 font-family: Montserrat, Segoe UI;
                 background: transparent;
@@ -216,49 +261,55 @@ class MainWindow(QMainWindow):
         self.sliders_layout.setContentsMargins(0, 0, 0, 0)
         self.sliders_layout.setAlignment(Qt.AlignLeft)
         
-        # Restore Slider Order?
-        # Get saved order
-        saved_slider_order = settings_manager.get_slider_order() # ["slider_0", "slider_3", ...]
+        # Initialize Sliders from Config
+        self.sliders = []
+        slider_order = settings_manager.get_slider_order()
         
-        default_names = ["Master", "Chrome", "Spotify", "System"]
-        
-        # Create sliders map/pool
-        slider_pool = {} # ID -> Slider
-        
-        # Create all specific sliders first (pool)
-        for i in range(self.slider_count):
-            if i < len(default_names):
-                name = default_names[i]
-            else:
-                name = f"Slider {i + 1}"
+        # If no order, but we have variable bindings, imply order from them? 
+        # Or if order is empty, check how many sX keys exist.
+        if not slider_order:
+            # Check for s1, s2... keys
+            count = 0
+            while True:
+                key = f"s{count + 1}"
+                if settings_manager.config_manager.load_variable_binding(key):
+                    count += 1
+                else:
+                     # Stop if gap? Or just assume 4 default.
+                     if count == 0: count = 4
+                     break
             
-            # Stable ID
-            s_id = f"slider_{i}"
-            slider = VolumeSlider(name, index=0) # Index updated later
+            # Generate default order
+            slider_order = [f"slider_{i}" for i in range(count)]
+            settings_manager.set_slider_order(slider_order)
+            
+        # Create sliders based on order
+        for i, s_id in enumerate(slider_order):
+            # Parse index from ID for stable naming (Slider 1, etc.)
+            try:
+                idx = int(s_id.split('_')[1])
+                name = f"Slider {idx + 1}"
+            except:
+                name = "Slider"
+                
+            slider = VolumeSlider(name, index=len(self.sliders))
             slider.id = s_id
-            slider.clicked.connect(lambda n=i, s=slider: self.on_slider_clicked(n, s))
+            
+            # Restore Bindings by POSITION (Index i)
+            # This ensures that if Slider_5 is at Position 0, it gets Config s1.
+            bindings = settings_manager.get_slider_binding_at_index(i)
+            if bindings:
+                slider.set_variables(bindings)
+            else:
+                pass
+                
+            slider.clicked.connect(lambda n=len(self.sliders), s=slider: self.on_slider_clicked(n, s))
             slider.dropped.connect(self.on_slider_dropped)
             
-            slider_pool[s_id] = slider
-
-        # Reconstruct self.sliders list based on saved order
-        self.sliders = []
-        
-        # 1. Add saved ones
-        if saved_slider_order:
-            for s_id in saved_slider_order:
-                if s_id in slider_pool:
-                    self.sliders.append(slider_pool[s_id])
-                    del slider_pool[s_id] # Mark as used
-        
-        # 2. Add remaining (new or unsaved)
-        # Sort remaining by original ID index to keep stable default order?
-        remaining = sorted(slider_pool.values(), key=lambda s: int(s.id.split('_')[1]))
-        self.sliders.extend(remaining)
-        
-        # 3. Add to layout and update indices
-        for i, slider in enumerate(self.sliders):
-            slider.index = i # Update current index
+            # Connect change signal for auto-save
+            slider.variableChanged.connect(self.save_bindings)
+            
+            self.sliders.append(slider)
             self.sliders_layout.addWidget(slider)
 
         layout.addWidget(sliders_widget)  # No stretch factor
@@ -270,78 +321,178 @@ class MainWindow(QMainWindow):
         self.buttons_layout.setContentsMargins(0, 0, 0, 0)
         self.buttons_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
-        # Button Reordering/Restoration Logic
-        # Similar logic. We use button_matrix flattened? 
-        # User said "button order should be saved in a matrix variable".
-        # If we just flatten the matrix, we get the order.
-        saved_matrix = settings_manager.get_button_matrix()
-        saved_button_order = []
-        if saved_matrix:
-            for row in saved_matrix:
-                for b_id in row:
-                    # We store "empty" in matrix.
-                    saved_button_order.append(b_id) # Accept "empty" here
-                        
-        button_pool = {}
-        
-        button_pool = {}
-        
-        default_buttons = [
-            ("play_pause.svg", "Play/Pause"),
-            ("previous.svg", "Previous"),
-            ("next.svg", "Next"),
-            ("mute.svg", "Mute"),
-            ("switch_output.svg", "Switch Output"),
-            ("open_app.svg", "Open App")
-        ]
-        
-        for i in range(self.button_count):
-            if i < len(default_buttons):
-                icon, text = default_buttons[i]
-            else:
-                icon, text = ("ghost.svg", "None")
-                
-            b_id = f"btn_{i}"
-            button = ActionButton(icon, text, index=0) # index updated later
-            button.id = b_id
-            button.clicked.connect(lambda num=i, btn=button: self.on_button_clicked(num, btn))
-            button.dropped.connect(self.on_button_dropped)
-            
-            button_pool[b_id] = button
-            
+        # Initialize Buttons from Config
         self.buttons = []
+        button_matrix = settings_manager.get_button_matrix()
         
-        if saved_button_order:
-            for b_id in saved_button_order:
-                if b_id == "empty":
-                     # Create placeholder
-                     # IMPORTANT: Pass parent
-                     placeholder = ActionButton("ghost.svg", "None", index=0, parent=self.content_area)
-                     placeholder.is_placeholder = True
-                     placeholder.id = f"placeholder_{len(self.buttons)}" # Temp ID
-                     placeholder.dropped.connect(self.on_button_dropped)
-                     self.buttons.append(placeholder)
-                elif b_id in button_pool:
-                     self.buttons.append(button_pool[b_id])
-                     del button_pool[b_id]
-                     
-        remaining_btns = sorted(button_pool.values(), key=lambda b: int(b.id.split('_')[1]))
-        if remaining_btns:
-            # Append remaining real buttons (flow into empty slots logic handled by grid resize if needed)
-            # If matrix was smaller than current real buttons, we just append them.
-            self.buttons.extend(remaining_btns)
-        
-        # Indices will be updated in update_button_grid
-        for i, btn in enumerate(self.buttons):
-            btn.index = i
+        # Default if missing
+        if not button_matrix:
+            # Default 2x3 matrix
+            count = 6
+            cols = 3
+            import math
+            rows = math.ceil(count / cols)
             
-        # Initial Layout
-        self.update_button_grid(settings_manager.get_grid_dimensions())  # Pass tuple (rows, cols)
+            button_matrix = []
+            c = 0
+            for r in range(rows):
+                row = []
+                for col in range(cols):
+                    if c < count:
+                        row.append(f"btn_{c}")
+                    else:
+                        row.append("empty")
+                    c += 1
+                button_matrix.append(row)
+            settings_manager.set_button_matrix(button_matrix)
+            settings_manager.set_grid_dimensions(rows, cols)
+            
+        # Flatten matrix to create buttons list
+        flat_order = []
+        for row in button_matrix:
+             for b_id in row:
+                 flat_order.append(b_id)
+                 
+        for i, b_id in enumerate(flat_order):
+            if b_id == "empty":
+                 placeholder = ActionButton("ghost.svg", "None", index=i, parent=self.content_area)
+                 placeholder.is_placeholder = True
+                 placeholder.id = f"placeholder_{i}"
+                 placeholder.dropped.connect(self.on_button_dropped)
+                 self.buttons.append(placeholder)
+            else:
+                 # Real button
+                 try:
+                     idx = int(b_id.split('_')[1])
+                 except:
+                     idx = i
+                 
+                 btn = ActionButton("ghost.svg", "None", index=i) # Text updated by set_variable
+                 btn.id = b_id
+                 
+                 # Restore Binding by POSITION (Index i)
+                 # Note: i is the flat index in the matrix/grid.
+                 # This maps to b1, b2, ... in linear order.
+                 binding = settings_manager.get_button_binding_at_index(i)
+                 if binding:
+                     btn.set_variable(binding.get('value'), binding.get('argument'), binding.get('argument2'))
+                 
+                 btn.clicked.connect(lambda num=i, b=btn: self.on_button_clicked(num, b))
+                 btn.dropped.connect(self.on_button_dropped)
+                 
+                 # Connect change signal
+                 btn.variableChanged.connect(self.save_bindings)
+                 
+                 self.buttons.append(btn)
+        
+        # Update layout
+        rows, cols = settings_manager.get_grid_dimensions()
+        if rows == 0 or cols == 0:
+             # Infer from matrix
+             rows = len(button_matrix)
+             cols = len(button_matrix[0]) if rows > 0 else 0
+             settings_manager.set_grid_dimensions(rows, cols)
+             
+        self.update_button_grid((rows, cols))
         
         layout.addWidget(buttons_widget)
         
         main_layout.addWidget(controls_container)
         
+        # Connect Hardware Signals from Singleton/Core
+        # Assuming we can access CoreController instance or internal Audio/Serial
+        # Since we instantiated CoreController in main.py, we really should pass it or access it.
+        # But `CoreController` isn't a singleton itself (it's instantiated).
+        # We need to bridge this. `main.py` created it. 
+        # However, `main_window` was instantiated cleanly.
+        # Fix: access it via global or import based on existing structure?
+        # The prompt says "once the device is connected it will send the number of sliders".
+        
+    def update_device_layout(self, num_sliders: int, num_buttons: int):
+        """Update layout based on hardware capabilities."""
+        # Update Sliders
+        current_sliders = len(self.sliders)
+        
+        if num_sliders > current_sliders:
+            # Add new sliders
+            start_idx = current_sliders
+            for i in range(start_idx, num_sliders):
+                s_id = f"slider_{i}" 
+                # Ensure it doesn't duplicate logic if we re-use IDs or have gaps?
+                # Just sequential for now.
+                
+                # Check if we recycled an old ID that has bindings?
+                slider = VolumeSlider(f"Slider {i + 1}", index=len(self.sliders))
+                slider.id = s_id
+                
+                # Try to restore binding if it existed previously for this ID (Position i)
+                # s_id here is just ID. Binding comes from Position i.
+                bindings = settings_manager.get_slider_binding_at_index(i)
+                if bindings:
+                   slider.set_variables(bindings)
+                   
+                slider.clicked.connect(lambda n=len(self.sliders), s=slider: self.on_slider_clicked(n, s))
+                slider.dropped.connect(self.on_slider_dropped)
+                slider.variableChanged.connect(self.save_bindings) # Connect signal
+                
+                self.sliders.append(slider)
+                self.sliders_layout.addWidget(slider)
+                
+        elif num_sliders < current_sliders:
+            # Remove last sliders
+            # User said "delete the last"
+            diff = current_sliders - num_sliders
+            for _ in range(diff):
+                slider = self.sliders.pop()
+                slider.setParent(None)
+                slider.deleteLater()
+        
+        # Update Slider Order Config
+        self.save_layout_settings()
+
+        # Update Buttons
+        # Count REAL buttons
+        real_buttons = [b for b in self.buttons if not getattr(b, 'is_placeholder', False)]
+        current_buttons = len(real_buttons)
+        
+        if num_buttons > current_buttons:
+             # Add buttons
+             start = current_buttons
+             for i in range(start, num_buttons):
+                 b_id = f"btn_{i}"
+                 btn = ActionButton("ghost.svg", "None", index=0)
+                 btn.id = b_id
+                 
+                 btn.clicked.connect(lambda: None) # Will be reconnected in update_button_grid re-render usually?
+                 # Actually safer to append to self.buttons then call update_button_grid which handles placement.
+                 # But self.buttons contains placeholders.
+                 # We simply add to the pool effectively.
+                 
+                 # Strategy: Just append to self.buttons (replacing placeholders if available?)
+                 # Or append to end.
+                 self.buttons.append(btn)
+        
+        elif num_buttons < current_buttons:
+             # Remove last real buttons
+             # Need to find them in the list (which is mixed)
+             # Traverse backwards
+             removed = 0
+             to_remove = current_buttons - num_buttons
+             
+             for i in range(len(self.buttons) - 1, -1, -1):
+                 btn = self.buttons[i]
+                 if not getattr(btn, 'is_placeholder', False):
+                     self.buttons.pop(i)
+                     btn.setParent(None)
+                     btn.deleteLater()
+                     removed += 1
+                     if removed >= to_remove:
+                         break
+                         
+        # Trigger grid recalculation
+        self.update_button_grid()
+        self.save_layout_settings()
+
     def toggle_reorder_buttons(self, enabled: bool):
         """Toggle reorder mode for buttons."""
         self.reorder_buttons_mode = enabled
@@ -350,8 +501,6 @@ class MainWindow(QMainWindow):
             
         if enabled:
             self.close_menu()
-            # Also ensure visual update in case grid logic needs to show placeholders?
-            # For now, just mode toggle.
             
     def toggle_reorder_sliders(self, enabled: bool):
         """Toggle reorder mode for sliders."""
@@ -365,18 +514,11 @@ class MainWindow(QMainWindow):
             
     def on_button_dropped(self, source_idx, target_idx):
         """Handle button drop (swap)."""
-        # source_idx is index in self.buttons list
-        # target_idx is... wait. If target is a placeholder, it might be in the list?
-        # Yes, we will put placeholders in self.buttons list so indices align with grid cells.
-        
         if source_idx < 0 or source_idx >= len(self.buttons):
             return
         if target_idx < 0 or target_idx >= len(self.buttons):
             return
 
-        b1 = self.buttons[source_idx]
-        b2 = self.buttons[target_idx]
-        
         # Swap in list
         self.buttons[source_idx], self.buttons[target_idx] = self.buttons[target_idx], self.buttons[source_idx]
         
@@ -387,8 +529,12 @@ class MainWindow(QMainWindow):
         # Update Visuals
         self.update_button_grid()
         
-        # Save
+        # Save Layout
         self.save_layout_settings()
+        
+        # Save Bindings (Order changed, so Positional Bindings must update)
+        # e.g. b1 is now what b2 was.
+        self.save_bindings()
 
     def on_slider_dropped(self, source_idx, target_idx):
         """Handle slider drop (swap)."""
@@ -396,8 +542,8 @@ class MainWindow(QMainWindow):
         self.sliders[source_idx], self.sliders[target_idx] = self.sliders[target_idx], self.sliders[source_idx]
         
         # Update indices
-        self.sliders[source_idx].index = source_idx
-        self.sliders[target_idx].index = target_idx
+        for i, s in enumerate(self.sliders):
+             s.index = i
         
         # Update Visuals
         self.update_slider_layout()
@@ -405,30 +551,46 @@ class MainWindow(QMainWindow):
         # Save Order
         self.save_layout_settings()
         
+        # Save Bindings (Positional update)
+        self.save_bindings()
+        
+    def save_bindings(self, *args):
+        """Save all current bindings based on current positions."""
+        # Save Sliders: Position i -> s(i+1)
+        for i, slider in enumerate(self.sliders):
+            settings_manager.save_slider_binding_at_index(i, slider.active_variables)
+            
+        # Save Buttons: Position i -> b(i+1)
+        for i, btn in enumerate(self.buttons):
+            if getattr(btn, 'is_placeholder', False):
+                 # Do we clear binding? Yes.
+                 # Pass empty or None? 
+                 # SettingsManager expects dict for button binding usually? 
+                 # Or we just don't save anything? 
+                 # If we don't save, old binding remains?
+                 # We should clear it.
+                 # Or save dummy.
+                 # Let's save None.
+                 pass
+            else:
+                 var = btn.get_variable()
+                 settings_manager.save_button_binding_at_index(i, var)
+                 
+        # ConfigManager usually saves on add_binding immediately, 
+        # but if we do bulk, we might want to optimize? 
+        # Currently it auto-saves. That's fine for user interaction speed.
+        
     def  update_slider_layout(self):
         """Re-render sliders in correct order."""
-        # Get layout from widget or... we have reference?
-        # self.sliders is the list.
-        # We need to access the layout. It's inside setup_controllers -> sliders_widget
-        # I should save sliders_layout as self attribute.
-        
         if not hasattr(self, 'sliders_layout'):
             return 
             
-        # Clear layout
-        while self.sliders_layout.count():
-            item = self.sliders_layout.takeAt(0)
-            if item.widget():
-                item.widget().setParent(None) # Remove visual
-                # We hide it then re-add, but here order matters fundamentally.
-                # Since we want to reorder, removing and re-adding is best.
-                # But we must ensure widget isn't destroyed. setParent(None) removes from hierarchy.
-                # We hold ref in self.sliders.
+        # Clear layout (remove from view but keep object)
+        for _ in range(self.sliders_layout.count()):
+             self.sliders_layout.takeAt(0)
         
         # Re-add in new order
         for s in self.sliders:
-            # Ensure visible?
-            # s.show() handled by logic
             self.sliders_layout.addWidget(s)
 
     def save_layout_settings(self):
@@ -443,16 +605,9 @@ class MainWindow(QMainWindow):
         rows, cols = settings_manager.get_grid_dimensions()
         
         # If auto-calc was used (rows=0), we should probably calculate actual used dimensions?
-        # But if user set Custom, we adhere to it.
-        # If still 0, we fallback to logic.
         if rows == 0 or cols == 0:
-             # Logic from update_button_grid
              import math
-             n = len([b for b in self.buttons if b.get_variable() is not None]) # Count real buttons?
-             # Actually self.buttons now contains placeholders.
-             # We should count non-placeholders.
-             real_btns = [b for b in self.buttons if not getattr(b, 'is_placeholder', False)]
-             n = len(real_btns)
+             n = len([b for b in self.buttons if not getattr(b, 'is_placeholder', False)])
              if n > 0:
                 cols = math.ceil(math.sqrt(n))
                 rows = math.ceil(n / cols)
@@ -477,12 +632,14 @@ class MainWindow(QMainWindow):
             matrix.append(row_list)
             
         settings_manager.set_button_matrix(matrix)
+        settings_manager.set_grid_dimensions(rows, cols)
 
 
     def update_button_grid(self, dimensions: tuple[int, int] = None):
         """Update button grid layout based on grid settings, supporting sparse grid."""
         if dimensions:
             rows, cols = dimensions
+            settings_manager.set_grid_dimensions(rows, cols)
         else:
              rows, cols = settings_manager.get_grid_dimensions()
 
@@ -492,74 +649,35 @@ class MainWindow(QMainWindow):
             if item.widget():
                 item.widget().setParent(None)
         
-        # Auto-calculate if 0
-        # If 0, we imply "compact/auto" mode, so no placeholders usually.
-        # But let's standardize.
-        import math
-        real_buttons = [b for b in self.buttons if not getattr(b, 'is_placeholder', False)]
+        # Rebuild self.buttons list if size changed significantly or we want to normalize placeholders?
+        # For now, assumes self.buttons matches rows*cols logic roughly or we reflow.
+        # Ensure list size matches content
         
-        if rows == 0 or cols == 0:
-            n = len(real_buttons)
-            if n > 0:
-                cols = math.ceil(math.sqrt(n))
-                rows = math.ceil(n / cols)
-            else:
-                rows, cols = 1, 1
-        
-        # Ensure self.buttons matches total slots (rows * cols)
-        # We need to fill self.buttons with placeholders if it's too short,
-        # or remove placeholders if too long.
         total_slots = rows * cols
         
-        # Rebuild self.buttons list to match grid size
-        # We keep the "real" buttons in their relative order (linear read)?
-        # Or we respect the current list order?
-        # Issue: Changing grid size reshuffles everything.
-        # If we expand, we append placeholders.
-        # If we shrink, we wrap? Or drop? (Shouldn't drop real buttons).
-        
-        # Current list might contain placeholders from previous grid.
-        # Filter placeholders out first to get "content".
+        # Filter placeholders out first to get "content"
         content_buttons = [b for b in self.buttons if not getattr(b, 'is_placeholder', False)]
         
-        # But wait, if we are just re-rendering (e.g. after swap), we don't want to destroy layout.
-        # We should only resize list if Grid Size Changed.
-        # How to detect? We compare len(self.buttons) with total_slots.
-        # If len == total -> Just render.
-        # If len != total -> Resizing happened.
+        # Rebuild full list
+        new_list = []
+        # We try to preserve positions if possible? 
+        # But if grid dimensions changed, reflow is standard.
+        # User implies simple addition/removal. Reflow is safest.
         
-        if len(self.buttons) != total_slots:
-            # Resizing logic
-            new_list = []
-            # Fill with existing content (skipping old placeholders usually? 
-            # Or if we want to preserve "empty slot at index 1"? 
-            # If resizing 3x3 -> 4x4, we append.
-            # If resizing 3x3 -> 2x2, we might lose positions.
-            # Best effort: Flatten current grid, take first N items that fit?
-            # Or just reflow "Real" buttons into new grid?
-            # Creating a "fresh start" for layout when resizing is acceptable.
-            # Reflow real buttons sequentially.
-            
-            # Use 'real_buttons' (content)
-            for i in range(total_slots):
-                if i < len(real_buttons):
-                    new_list.append(real_buttons[i])
-                else:
-                    # Create placeholder
-                    # Placeholder is an ActionButton with special state?
-                    # Or just "None" state but we mark it.
-                    # IMPORTANT: Pass parent to avoid top-level window flash
-                    placeholder = ActionButton("ghost.svg", "None", index=i, parent=self.content_area)
-                    placeholder.is_placeholder = True
-                    # Set ID to differentiate
-                    placeholder.id = f"placeholder_{i}" 
-                    placeholder.dropped.connect(self.on_button_dropped)
-                    # Initialize in "None" state
-                    placeholder.set_variable("None") 
-                    new_list.append(placeholder)
-            
-            self.buttons = new_list
-        
+        for i in range(total_slots):
+             if i < len(content_buttons):
+                 new_list.append(content_buttons[i])
+             else:
+                 # Create placeholder
+                 placeholder = ActionButton("ghost.svg", "None", index=i, parent=self.content_area)
+                 placeholder.is_placeholder = True
+                 placeholder.id = f"placeholder_{i}" 
+                 placeholder.dropped.connect(self.on_button_dropped)
+                 placeholder.set_variable("None") 
+                 new_list.append(placeholder)
+                 
+        self.buttons = new_list
+
         # Render
         count = 0
         for r in range(rows):
@@ -569,11 +687,10 @@ class MainWindow(QMainWindow):
                     btn.index = count # Ensure index is synced
                     btn.show()
                     
-                    # If reorder mode active, ensure placeholder has correct style/state?
                     if getattr(self, 'reorder_buttons_mode', False):
                         btn.set_reorder_mode(True)
                     else:
-                        btn.set_reorder_mode(False) # Ensure off
+                        btn.set_reorder_mode(False)
                         
                     self.buttons_layout.addWidget(btn, r, c)
                     count += 1
@@ -647,7 +764,7 @@ class MainWindow(QMainWindow):
         menu_layout.addWidget(scroll_area)
         
         # Menu builder
-        self.menu_builder = MenuBuilder(self.menu_content_layout)
+        self.menu_builder = MenuBuilder(self.menu_content_layout, self.audio_manager)
         # self.menu_builder.on_alignment_changed = self.update_button_grid # Deprecated
         self.menu_builder.on_grid_changed = lambda r, c: self.update_button_grid((r, c))
         self.menu_builder.variable_validator = self.check_variable_availability
@@ -899,7 +1016,7 @@ class MainWindow(QMainWindow):
         
         # Quit action
         quit_action = tray_menu.addAction("Quit")
-        quit_action.triggered.connect(self.close)
+        quit_action.triggered.connect(self.quit_application)
         
         # Set menu to tray icon
         self.tray_icon.setContextMenu(tray_menu)
@@ -910,6 +1027,10 @@ class MainWindow(QMainWindow):
         # Show the tray icon
         self.tray_icon.show()
     
+    def quit_application(self):
+        """Quit the application completely."""
+        QApplication.quit()
+
     def on_tray_activated(self, reason):
         """Handle tray icon activation."""
         if reason == QSystemTrayIcon.DoubleClick:

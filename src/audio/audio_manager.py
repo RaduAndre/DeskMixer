@@ -24,6 +24,7 @@ class AudioManager:
         self.window_monitor = None
         self.last_focused_app = None
         self.serial_controller = None
+        self.slider_sampling = "normal" # Default
         
         # Track slider history for averaging - PER SLIDER
         # (Kept for compatibility if anything else uses it, but logic moved to controller)
@@ -50,10 +51,20 @@ class AudioManager:
         self.serial_handler = serial_handler
         self.config_manager = config_manager
         
+        # Load settings
+        if self.config_manager:
+            self.slider_sampling = self.config_manager.get_slider_sampling("normal")
+        
         # Initialize SerialController now that we have handlers
         if self.serial_handler and self.config_manager:
             self.serial_controller = SerialController(self, self.serial_handler, self.config_manager)
             self.serial_controller.start()
+
+    def set_slider_sampling(self, mode):
+        """Update slider sampling mode"""
+        self.slider_sampling = mode
+        # Propagate to controller if needed (it reads from config usually but variable is faster)
+        # For now, just storing it as requested.
 
     # Delegate methods to driver
     def set_master_volume(self, level):
