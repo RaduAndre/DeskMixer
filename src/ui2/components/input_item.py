@@ -18,12 +18,16 @@ class InputItem(QWidget):
     clicked = Signal() # Signal for activation via parent
 
     
-    def __init__(self, placeholder: str = "", initial_value: str = "", level: int = 0, parent=None):
+    def __init__(self, placeholder: str = "", initial_value: str = "", level: int = 0, show_icon: bool = True, icon_name: str = "record.svg", icon_callback=None, parent=None):
         super().__init__(parent)
         self.placeholder = placeholder
         self.current_value = initial_value
         self.level = level
         self._active = False # State to track active status
+        
+        self.show_icon = show_icon
+        self.icon_name = icon_name
+        self.icon_callback = icon_callback
         
         # Make the main widget transparent
         self.setStyleSheet("background: transparent;")
@@ -46,11 +50,6 @@ class InputItem(QWidget):
         self.container.setFixedHeight(50)
         
         # Style for the container (Input element style)
-        # Using a darker/different background for input or same as menu items?
-        # User asked for "separate type of element".
-        # Let's match the style of unselected menu items but with input capability.
-        # Or maybe specific style for input.
-        
         self.update_style()
         
         container_layout = QHBoxLayout(self.container)
@@ -78,16 +77,28 @@ class InputItem(QWidget):
         
         container_layout.addWidget(self.input_field, 1)
         
-        # Record Icon (Right side)
-        self.icon_label = QLabel()
-        self.icon_label.setFixedSize(20, 20)
-        self.icon_label.setStyleSheet("background: transparent;")
-        
-        # Set icon (White record icon)
-        icon = icon_manager.get_colored_icon("record.svg", colors.WHITE)
-        self.icon_label.setPixmap(icon.pixmap(20, 20))
-        
-        container_layout.addWidget(self.icon_label)
+        if self.show_icon:
+            # Icon (Right side)
+            self.icon_label = QLabel()
+            self.icon_label.setFixedSize(20, 20)
+            self.icon_label.setStyleSheet("background: transparent;")
+            
+            # Set icon
+            icon = icon_manager.get_colored_icon(self.icon_name, colors.WHITE)
+            self.icon_label.setPixmap(icon.pixmap(20, 20))
+            
+            # Make clickable if callback provided
+            if self.icon_callback:
+                self.icon_label.setCursor(Qt.PointingHandCursor)
+                # Install event filter or subclass? 
+                # Simpler: just overwrite mousePressEvent for this label instance or wrap it
+                # Monkey patching instance method
+                def mousePressEvent(event):
+                    if event.button() == Qt.LeftButton:
+                        self.icon_callback()
+                self.icon_label.mousePressEvent = mousePressEvent
+            
+            container_layout.addWidget(self.icon_label)
         
         main_layout.addWidget(self.container)
         
@@ -156,7 +167,7 @@ class InputItem(QWidget):
     def flash_error(self):
         """Flash the border red to indicate error."""
         from PySide6.QtCore import QTimer
-        from src.ui2 import colors
+        from ui2 import colors
         
         # We need to override the style temporarily
         # Current logic uses #container_box ID selector

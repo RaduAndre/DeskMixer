@@ -29,6 +29,9 @@ class AudioManager:
         # Track slider history for averaging - PER SLIDER
         # (Kept for compatibility if anything else uses it, but logic moved to controller)
         self.slider_history = {} 
+        
+        self.callbacks = []
+        self.last_notified_volumes = {}
 
         if AUDIO_AVAILABLE:
             self._initialize_driver()
@@ -46,6 +49,47 @@ class AudioManager:
         except Exception as e:
             log_error(e, "Failed to initialize audio driver")
             raise RuntimeError("Audio driver initialization failed")
+            
+    def add_volume_callback(self, callback):
+        """Add callback for volume changes. Signature: callback(target_name, volume)"""
+        if callback not in self.callbacks:
+            self.callbacks.append(callback)
+            
+    def _notify_volume_change(self, target, volume):
+        """Notify listeners of volume change if changed significantly."""
+        last_vol = self.last_notified_volumes.get(target, -1.0)
+        
+        # Check diff (tolerance 0.01 = 1%)
+        if abs(volume - last_vol) < 0.01:
+            return
+            
+        self.last_notified_volumes[target] = volume
+        
+        # Convert to percentage (0-100) for UI
+        vol_percent = int(volume * 100)
+        
+        for callback in self.callbacks:
+            try:
+                callback(target, vol_percent)
+            except Exception as e:
+                log_error(e, f"Error in volume callback for {target}")
+                
+    def add_button_press_callback(self, callback):
+        """Add callback for button presses. Signature: callback(button_id)"""
+        if not hasattr(self, 'button_callbacks'):
+            self.button_callbacks = []
+        if callback not in self.button_callbacks:
+            self.button_callbacks.append(callback)
+            
+    def notify_button_press(self, button_id):
+        """Notify listeners of button press"""
+        if not hasattr(self, 'button_callbacks'):
+            return
+        for callback in self.button_callbacks:
+            try:
+                callback(button_id)
+            except Exception as e:
+                log_error(e, f"Error in button press callback for {button_id}")
 
     def set_handlers(self, serial_handler, config_manager):
         self.serial_handler = serial_handler
@@ -68,16 +112,24 @@ class AudioManager:
 
     # Delegate methods to driver
     def set_master_volume(self, level):
-        if self.driver: self.driver.set_master_volume(level)
+        if self.driver: 
+            self.driver.set_master_volume(level)
+            self._notify_volume_change("Master", level)
 
     def set_mic_volume(self, level):
-        if self.driver: self.driver.set_mic_volume(level)
+        if self.driver: 
+            self.driver.set_mic_volume(level)
+            self._notify_volume_change("Microphone", level)
 
     def set_system_sounds_volume(self, level):
-        if self.driver: self.driver.set_system_sounds_volume(level)
+        if self.driver: 
+            self.driver.set_system_sounds_volume(level)
+            self._notify_volume_change("System Sounds", level)
 
     def set_app_volume(self, app_name, level):
-        if self.driver: self.driver.set_app_volume(app_name, level)
+        if self.driver: 
+            self.driver.set_app_volume(app_name, level)
+            self._notify_volume_change(app_name, level)
 
     def toggle_master_mute(self):
         if self.driver: self.driver.toggle_master_mute()
@@ -99,25 +151,25 @@ class AudioManager:
         if focused_app:
             self.driver.toggle_app_mute(focused_app)
             
-    def toggle_unbinded_mute(self):
+    def toggle_unbound_mute(self):
         """
-        Smart toggle for unbinded apps:
-        - If ANY unbinded app is unmuted -> Mute ALL unbinded apps
-        - If ALL unbinded apps are muted -> Unmute ALL unbinded apps
+        Smart toggle for unbound apps:
+        - If ANY unbound app is unmuted -> Mute ALL unbound apps
+        - If ALL unbound apps are muted -> Unmute ALL unbound apps
         """
         if not self.driver: return
         
         bound_apps = self._get_bound_apps()
         all_apps = self.driver.get_all_audio_apps()
         
-        unbinded_apps = [app for app in all_apps if app not in bound_apps]
+        unbound_apps = [app for app in all_apps if app not in bound_apps]
         
-        if not unbinded_apps:
+        if not unbound_apps:
             return
 
-        # Check if any unbinded app is currently unmuted
+        # Check if any unbound app is currently unmuted
         any_unmuted = False
-        for app_name in unbinded_apps:
+        for app_name in unbound_apps:
             is_muted = self.driver.get_app_mute(app_name)
             if not is_muted:
                 any_unmuted = True
@@ -127,14 +179,14 @@ class AudioManager:
         # If all are muted, we want to unmute all (target_mute = False)
         target_mute = any_unmuted
         
-        for app_name in unbinded_apps:
+        for app_name in unbound_apps:
             # We only need to toggle if the current state is different from target
             current_mute = self.driver.get_app_mute(app_name)
             if current_mute != target_mute:
                 self.driver.toggle_app_mute(app_name)
     
-    def set_unbinded_volumes(self, level):
-        """Set volume for unbinded apps"""
+    def set_unbound_volumes(self, level):
+        """Set volume for unbound apps"""
         if not self.driver: return
         
         bound_apps = self._get_bound_apps()
@@ -158,6 +210,8 @@ class AudioManager:
             if app_name not in bound_apps:
                 if not focused_app or app_name != focused_app:
                     self.driver.set_app_volume(app_name, level)
+                    
+        self._notify_volume_change("Unbound", level)
         
     def get_all_audio_apps(self):
         """Get list of all active audio applications"""
@@ -192,9 +246,17 @@ class AudioManager:
                 if isinstance(app_names, str):
                     app_names = [app_names]
 
-                for app_name in app_names:
-                    if app_name not in ['Master', 'Microphone', 'System Sounds', 'Current Application', 'None', 'Unbinded']:
-                        bound_apps.add(app_name)
+                for item in app_names:
+                    # Handle if item is a dictionary (new format) or string (legacy)
+                    actual_name = None
+                    if isinstance(item, dict):
+                        # Try 'argument' then 'value' then 'app_name'
+                        actual_name = item.get('argument') or item.get('value') or item.get('app_name')
+                    elif isinstance(item, str):
+                        actual_name = item
+                        
+                    if actual_name and actual_name not in ['Master', 'Microphone', 'System Sounds', 'Current Application', 'None', 'Unbound']:
+                        bound_apps.add(actual_name)
 
             return bound_apps
         except Exception as e:

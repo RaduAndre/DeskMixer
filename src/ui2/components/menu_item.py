@@ -86,13 +86,15 @@ class MenuItem(QWidget):
     toggled = Signal(bool)  # Signal for expansion toggle
     
     def __init__(self, text: str, level: int = 0, selected: bool = False, 
-                 is_expandable: bool = False, is_default: bool = False, parent=None):
+                 is_expandable: bool = False, is_default: bool = False, extra_margin: int = 0, on_right_click=None, parent=None):
         super().__init__(parent)
         self.text = text
         self.level = level
         self._selected = selected
         self.is_expandable = is_expandable
         self.is_default = is_default
+        self.extra_margin = extra_margin
+        self.on_right_click = on_right_click
         self._expanded = False
         self._has_active_child = False
         self._rotation = -90 if self._expanded else 0  # -90 = Expanded (CCW), 0 = Collapsed
@@ -110,7 +112,7 @@ class MenuItem(QWidget):
         
         # Calculate padding based on level for the OUTER layout
         # This indents the entire container box
-        left_margin = 15 + (self.level * 15)
+        left_margin = 15 + (self.level * 15) + self.extra_margin
         main_layout.setContentsMargins(left_margin, 0, 15, 0)
         main_layout.setSpacing(0)
         
@@ -323,4 +325,8 @@ class MenuItem(QWidget):
                     self.clicked.emit()
             else:
                 self.clicked.emit()
+        elif event.button() == Qt.RightButton:
+            if self.on_right_click:
+                self.on_right_click(event.globalPos())
+        
         super().mousePressEvent(event)

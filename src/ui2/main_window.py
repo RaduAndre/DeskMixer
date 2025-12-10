@@ -29,6 +29,10 @@ class MainWindow(QMainWindow):
     
     # Signal for thread-safe status updates
     status_update_signal = Signal(str, str)
+    # Signal for thread-safe volume updates from backend
+    volume_update_signal = Signal(str, int)
+    # Signal for thread-safe button press notifications
+    button_press_signal = Signal(str)
     
     def __init__(self, audio_manager=None):
         super().__init__()
@@ -40,6 +44,14 @@ class MainWindow(QMainWindow):
         self.resize(1000, 600)
         self.setMinimumSize(800, 500)
         self.setWindowTitle("DeskMixer") # Critical for FindWindow
+        
+        # Set window icon for taskbar
+        try:
+            icon_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'icons', 'logo.ico'))
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
+        except Exception as e:
+            print(f"Failed to load window icon: {e}")
         
         # State
         self._drag_pos = None
@@ -53,9 +65,27 @@ class MainWindow(QMainWindow):
         
         # Connect signals
         self.status_update_signal.connect(self.on_status_update)
+        self.volume_update_signal.connect(self.update_slider_by_target)
+        self.button_press_signal.connect(self.on_button_press_from_device)
         
         self.setup_ui()
         self.setup_tray_icon()
+        
+    def on_button_press_from_device(self, device_button_id: str):
+        """Handle button press from device (e.g., 'b5' from device -> 'btn_4' in UI)."""
+        # Device buttons are 1-indexed (b1, b2, ...), UI buttons are 0-indexed (btn_0, btn_1, ...)
+        # Extract number from device_button_id (e.g., "b5" -> 5)
+        try:
+            if device_button_id.startswith('b'):
+                device_num = int(device_button_id[1:])
+                # Convert to UI ID (subtract 1)
+                ui_num = device_num - 1
+                ui_button_id = f"btn_{ui_num}"
+                # Trigger highlight
+                self.highlight_button_by_id(ui_button_id)
+        except (ValueError, IndexError) as e:
+            from utils.error_handler import log_error
+            log_error(e, f"Error parsing device button ID: {device_button_id}")
         
     def on_status_update(self, status: str, message: str):
         """Handle status update from background thread."""
@@ -295,12 +325,14 @@ class MainWindow(QMainWindow):
             slider = VolumeSlider(name, index=len(self.sliders))
             slider.id = s_id
             
-            # Restore Bindings by POSITION (Index i)
-            # This ensures that if Slider_5 is at Position 0, it gets Config s1.
-            bindings = settings_manager.get_slider_binding_at_index(i)
-            if bindings:
-                slider.set_variables(bindings)
-            else:
+            # Restore Bindings by LOGICAL ID (e.g. slider_0 -> s1)
+            # This ensures binding stays with the slider identity regardless of visual order.
+            try:
+                logical_idx = int(s_id.split('_')[1])
+                bindings = settings_manager.get_slider_binding_at_index(logical_idx)
+                if bindings:
+                    slider.set_variables(bindings)
+            except:
                 pass
                 
             slider.clicked.connect(lambda n=len(self.sliders), s=slider: self.on_slider_clicked(n, s))
@@ -370,12 +402,15 @@ class MainWindow(QMainWindow):
                  btn = ActionButton("ghost.svg", "None", index=i) # Text updated by set_variable
                  btn.id = b_id
                  
-                 # Restore Binding by POSITION (Index i)
-                 # Note: i is the flat index in the matrix/grid.
-                 # This maps to b1, b2, ... in linear order.
-                 binding = settings_manager.get_button_binding_at_index(i)
-                 if binding:
-                     btn.set_variable(binding.get('value'), binding.get('argument'), binding.get('argument2'))
+                 # Restore Binding by LOGICAL ID
+                 # This ensures binding stays with the button identity regardless of visual order.
+                 try:
+                     logical_idx = int(b_id.split('_')[1])
+                     binding = settings_manager.get_button_binding_at_index(logical_idx)
+                     if binding:
+                         btn.set_variable(binding.get('value'), binding.get('argument'), binding.get('argument2'))
+                 except:
+                     pass
                  
                  btn.clicked.connect(lambda num=i, b=btn: self.on_button_clicked(num, b))
                  btn.dropped.connect(self.on_button_dropped)
@@ -393,7 +428,9 @@ class MainWindow(QMainWindow):
              cols = len(button_matrix[0]) if rows > 0 else 0
              settings_manager.set_grid_dimensions(rows, cols)
              
-        self.update_button_grid((rows, cols))
+        # Call update_button_grid WITHOUT dimensions to avoid triggering the 
+        # "Resize & Sort" logic. We want to preserve the matrix order we just loaded.
+        self.update_button_grid()
         
         layout.addWidget(buttons_widget)
         
@@ -425,11 +462,14 @@ class MainWindow(QMainWindow):
                 slider = VolumeSlider(f"Slider {i + 1}", index=len(self.sliders))
                 slider.id = s_id
                 
-                # Try to restore binding if it existed previously for this ID (Position i)
-                # s_id here is just ID. Binding comes from Position i.
-                bindings = settings_manager.get_slider_binding_at_index(i)
-                if bindings:
-                   slider.set_variables(bindings)
+                # Try to restore binding if it existed previously for this ID
+                try:
+                    logical_idx = int(s_id.split('_')[1])
+                    bindings = settings_manager.get_slider_binding_at_index(logical_idx)
+                    if bindings:
+                       slider.set_variables(bindings)
+                except:
+                    pass
                    
                 slider.clicked.connect(lambda n=len(self.sliders), s=slider: self.on_slider_clicked(n, s))
                 slider.dropped.connect(self.on_slider_dropped)
@@ -439,13 +479,147 @@ class MainWindow(QMainWindow):
                 self.sliders_layout.addWidget(slider)
                 
         elif num_sliders < current_sliders:
-            # Remove last sliders
-            # User said "delete the last"
+            # Remove last LOGICAL slider (highest ID), regardless of visual position
             diff = current_sliders - num_sliders
             for _ in range(diff):
-                slider = self.sliders.pop()
-                slider.setParent(None)
-                slider.deleteLater()
+                # Find slider with highest ID index
+                max_id = -1
+                target_slider = None
+                
+                for s in self.sliders:
+                    try:
+                        sid = int(s.id.split('_')[1])
+                        if sid > max_id:
+                            max_id = sid
+                            target_slider = s
+                    except:
+                        pass
+                
+                if target_slider:
+                    self.sliders.remove(target_slider)
+                    target_slider.setParent(None)
+                    target_slider.deleteLater()
+                else:
+                    # Fallback if IDs parsing fails
+                    slider = self.sliders.pop()
+                    slider.setParent(None)
+                    slider.deleteLater()
+        
+        # Update Slider Order Config
+        self.save_layout_settings()
+
+    def update_slider_volume_by_id(self, slider_id: str, volume: int):
+        """Update slider volume and trigger highlight animation.
+        
+        Args:
+            slider_id (str): The logical ID of the slider (e.g., 'slider_0').
+            volume (int): The new volume level (0-100).
+        """
+        for slider in self.sliders:
+            if hasattr(slider, 'id') and slider.id == slider_id:
+                # set_value handles animation and highlight if implemented in VolumeSlider
+                slider.set_value(volume)
+                break
+                
+    def update_slider_by_target(self, target_name: str, volume: int):
+        """Update slider(s) bound to a specific target."""
+        # Find which slider is bound to this target
+        # We check active_variables of each slider
+        
+        # Normalize target name for case-insensitive comparison
+        target_lower = target_name.lower() if target_name else ""
+        
+        for slider in self.sliders:
+            if not hasattr(slider, 'active_variables'):
+                continue
+                
+            for var in slider.active_variables:
+                # check value (e.g. 'Master', 'chrome.exe') or argument
+                val = var.get('value')
+                arg = var.get('argument')
+                
+                # Normalize for comparison
+                val_lower = val.lower() if val else ""
+                arg_lower = arg.lower() if arg else ""
+                
+                # Match against either value or argument (some bindings might be complex)
+                # Usually target_name is the app name or "Master"
+                if val_lower == target_lower or arg_lower == target_lower:
+                    self.update_slider_volume_by_id(slider.id, volume)
+                    # Don't break, multiple sliders *could* theoretically be bound to same thing
+
+
+    def highlight_button_by_id(self, button_id: str):
+        """Highlight a button by its logical ID.
+        
+        Args:
+            button_id (str): The logical ID of the button (e.g., 'btn_0').
+        """
+        for btn in self.buttons:
+            if getattr(btn, 'is_placeholder', False):
+                continue
+                
+            if hasattr(btn, 'id') and btn.id == button_id:
+                if hasattr(btn, 'highlight'):
+                    btn.highlight()
+                break
+
+    def update_device_layout(self, num_sliders: int, num_buttons: int):
+        """Update layout based on hardware capabilities."""
+        # Update Sliders
+        current_sliders = len(self.sliders)
+        
+        if num_sliders > current_sliders:
+            # Add new sliders
+            start_idx = current_sliders
+            for i in range(start_idx, num_sliders):
+                s_id = f"slider_{i}" 
+                
+                slider = VolumeSlider(f"Slider {i + 1}", index=len(self.sliders))
+                slider.id = s_id
+                
+                # Try to restore binding if it existed previously for this ID
+                try:
+                    logical_idx = int(s_id.split('_')[1])
+                    bindings = settings_manager.get_slider_binding_at_index(logical_idx)
+                    if bindings:
+                       slider.set_variables(bindings)
+                except:
+                    pass
+                   
+                slider.clicked.connect(lambda n=len(self.sliders), s=slider: self.on_slider_clicked(n, s))
+                slider.dropped.connect(self.on_slider_dropped)
+                slider.variableChanged.connect(self.save_bindings)
+                
+                self.sliders.append(slider)
+                self.sliders_layout.addWidget(slider)
+                
+        elif num_sliders < current_sliders:
+            # Remove last LOGICAL slider (highest ID), regardless of visual position
+            diff = current_sliders - num_sliders
+            for _ in range(diff):
+                # Find slider with highest ID index
+                max_id = -1
+                target_slider = None
+                
+                for s in self.sliders:
+                    try:
+                        sid = int(s.id.split('_')[1])
+                        if sid > max_id:
+                            max_id = sid
+                            target_slider = s
+                    except:
+                        pass
+                
+                if target_slider:
+                    self.sliders.remove(target_slider)
+                    target_slider.setParent(None)
+                    target_slider.deleteLater()
+                else:
+                    # Fallback if IDs parsing fails
+                    slider = self.sliders.pop()
+                    slider.setParent(None)
+                    slider.deleteLater()
         
         # Update Slider Order Config
         self.save_layout_settings()
@@ -456,39 +630,51 @@ class MainWindow(QMainWindow):
         current_buttons = len(real_buttons)
         
         if num_buttons > current_buttons:
-             # Add buttons
-             start = current_buttons
-             for i in range(start, num_buttons):
-                 b_id = f"btn_{i}"
-                 btn = ActionButton("ghost.svg", "None", index=0)
-                 btn.id = b_id
-                 
-                 btn.clicked.connect(lambda: None) # Will be reconnected in update_button_grid re-render usually?
-                 # Actually safer to append to self.buttons then call update_button_grid which handles placement.
-                 # But self.buttons contains placeholders.
-                 # We simply add to the pool effectively.
-                 
-                 # Strategy: Just append to self.buttons (replacing placeholders if available?)
-                 # Or append to end.
-                 self.buttons.append(btn)
+            # Add buttons
+            start = current_buttons
+            for i in range(start, num_buttons):
+                b_id = f"btn_{i}"
+                btn = ActionButton("ghost.svg", "None", index=0)
+                btn.id = b_id
+                
+                btn.clicked.connect(lambda: None)
+                self.buttons.append(btn)
         
         elif num_buttons < current_buttons:
-             # Remove last real buttons
-             # Need to find them in the list (which is mixed)
-             # Traverse backwards
-             removed = 0
-             to_remove = current_buttons - num_buttons
-             
-             for i in range(len(self.buttons) - 1, -1, -1):
-                 btn = self.buttons[i]
-                 if not getattr(btn, 'is_placeholder', False):
-                     self.buttons.pop(i)
-                     btn.setParent(None)
-                     btn.deleteLater()
-                     removed += 1
-                     if removed >= to_remove:
-                         break
-                         
+            # Remove last real buttons by LOGICAL ID (highest ID)
+            to_remove = current_buttons - num_buttons
+            
+            for _ in range(to_remove):
+                max_id = -1
+                target_btn = None
+                
+                for btn in self.buttons:
+                    if getattr(btn, 'is_placeholder', False):
+                        continue
+                    
+                    try:
+                        bid = int(btn.id.split('_')[1])
+                        if bid > max_id:
+                            max_id = bid
+                            target_btn = btn
+                    except:
+                        pass
+                
+                if target_btn:
+                    self.buttons.remove(target_btn)
+                    target_btn.setParent(None)
+                    target_btn.deleteLater()
+                else:
+                    # Fallback
+                    # Find last non-placeholder
+                    for i in range(len(self.buttons) - 1, -1, -1):
+                        btn = self.buttons[i]
+                        if not getattr(btn, 'is_placeholder', False):
+                            self.buttons.pop(i)
+                            btn.setParent(None)
+                            btn.deleteLater()
+                            break
+                        
         # Trigger grid recalculation
         self.update_button_grid()
         self.save_layout_settings()
@@ -556,25 +742,25 @@ class MainWindow(QMainWindow):
         
     def save_bindings(self, *args):
         """Save all current bindings based on current positions."""
-        # Save Sliders: Position i -> s(i+1)
-        for i, slider in enumerate(self.sliders):
-            settings_manager.save_slider_binding_at_index(i, slider.active_variables)
+        # Save Sliders: Logical ID -> s(ID+1)
+        for slider in self.sliders:
+            try:
+                logical_idx = int(slider.id.split('_')[1])
+                settings_manager.save_slider_binding_at_index(logical_idx, slider.active_variables)
+            except:
+                pass
             
-        # Save Buttons: Position i -> b(i+1)
-        for i, btn in enumerate(self.buttons):
+        # Save Buttons: Logical ID -> b(ID+1)
+        for btn in self.buttons:
             if getattr(btn, 'is_placeholder', False):
-                 # Do we clear binding? Yes.
-                 # Pass empty or None? 
-                 # SettingsManager expects dict for button binding usually? 
-                 # Or we just don't save anything? 
-                 # If we don't save, old binding remains?
-                 # We should clear it.
-                 # Or save dummy.
-                 # Let's save None.
                  pass
             else:
-                 var = btn.get_variable()
-                 settings_manager.save_button_binding_at_index(i, var)
+                 try:
+                     logical_idx = int(btn.id.split('_')[1])
+                     var = btn.get_variable()
+                     settings_manager.save_button_binding_at_index(logical_idx, var)
+                 except:
+                     pass
                  
         # ConfigManager usually saves on add_binding immediately, 
         # but if we do bulk, we might want to optimize? 
@@ -655,28 +841,52 @@ class MainWindow(QMainWindow):
         
         total_slots = rows * cols
         
-        # Filter placeholders out first to get "content"
-        content_buttons = [b for b in self.buttons if not getattr(b, 'is_placeholder', False)]
+        # Check if we need to rebuild the list
+        # We rebuild if:
+        # 1. Grid dimensions explicitly changed (dimensions arg provided)
+        # 2. Total slots mismatch (e.g. initial load or resize)
+        # 3. We want to force reflow (rare here)
         
-        # Rebuild full list
-        new_list = []
-        # We try to preserve positions if possible? 
-        # But if grid dimensions changed, reflow is standard.
-        # User implies simple addition/removal. Reflow is safest.
-        
-        for i in range(total_slots):
-             if i < len(content_buttons):
-                 new_list.append(content_buttons[i])
-             else:
-                 # Create placeholder
-                 placeholder = ActionButton("ghost.svg", "None", index=i, parent=self.content_area)
-                 placeholder.is_placeholder = True
-                 placeholder.id = f"placeholder_{i}" 
-                 placeholder.dropped.connect(self.on_button_dropped)
-                 placeholder.set_variable("None") 
-                 new_list.append(placeholder)
-                 
-        self.buttons = new_list
+        should_rebuild = False
+        if dimensions is not None:
+             should_rebuild = True
+        elif len(self.buttons) != total_slots:
+             should_rebuild = True
+             
+        if should_rebuild:
+            # Filter placeholders out first to get "content"
+            content_buttons = [b for b in self.buttons if not getattr(b, 'is_placeholder', False)]
+            
+            # SORT by Logical ID to restore default order "1 2 3 4" on grid resize
+            def get_btn_id(b):
+                try:
+                    return int(b.id.split('_')[1])
+                except:
+                    return 0
+            content_buttons.sort(key=get_btn_id)
+            
+            # Rebuild full list
+            new_list = []
+            
+            for i in range(total_slots):
+                 if i < len(content_buttons):
+                     new_list.append(content_buttons[i])
+                 else:
+                     # Create placeholder
+                     # Check if we can reuse existing placeholders? No, simpler to recreate or just use logic.
+                     # Recreating is safer for IDs.
+                     placeholder = ActionButton("ghost.svg", "None", index=i, parent=self.content_area)
+                     placeholder.is_placeholder = True
+                     placeholder.id = f"placeholder_{i}" 
+                     placeholder.dropped.connect(self.on_button_dropped)
+                     placeholder.set_variable("None") 
+                     new_list.append(placeholder)
+                     
+            self.buttons = new_list
+        else:
+            # Just reusing existing list (sparse layout preserved)
+            # Ensure indices are correct in the loop below
+            pass
 
         # Render
         count = 0
@@ -699,6 +909,10 @@ class MainWindow(QMainWindow):
         container = self.buttons_layout.parentWidget()
         if container:
             container.setMaximumWidth(cols * 85 + (cols - 1) * 2)
+            
+        # If dimensions changed explicitly, save the new default layout immediately
+        if dimensions:
+             self.save_layout_settings()
     
     def setup_menu(self):
         """Setup the sliding menu."""
@@ -865,7 +1079,13 @@ class MainWindow(QMainWindow):
                 self.selected_button.set_active(False)
                 self.selected_button = None
         elif menu_type == "slider":
-            self.menu_title.setText(f"Slider {item_num + 1}")
+            title_num = item_num + 1
+            if self.selected_slider and hasattr(self.selected_slider, 'id'):
+                try:
+                    title_num = int(self.selected_slider.id.split('_')[1]) + 1
+                except:
+                    pass
+            self.menu_title.setText(f"Slider {title_num}")
             self.menu_builder.build_slider_menu(self.selected_slider)
             # Restore normal settings icon
             self.update_settings_icon(False)
@@ -874,7 +1094,13 @@ class MainWindow(QMainWindow):
                 self.selected_button.set_active(False)
                 self.selected_button = None
         elif menu_type == "button":
-            self.menu_title.setText(f"Button {item_num + 1}")
+            title_num = item_num + 1
+            if self.selected_button and hasattr(self.selected_button, 'id'):
+                try:
+                    title_num = int(self.selected_button.id.split('_')[1]) + 1
+                except:
+                    pass
+            self.menu_title.setText(f"Button {title_num}")
             self.menu_builder.build_button_menu(self.selected_button)
             # Restore normal settings icon
             self.update_settings_icon(False)

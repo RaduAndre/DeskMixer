@@ -164,5 +164,28 @@ class SettingsManager:
          except:
              pass
 
+    def get_app_list(self) -> list[str]:
+        """Get the list of custom applications."""
+        return self.config_manager.get_config_value('app_list', [])
+
+    def add_app_to_list(self, app_name: str):
+        """Add an application to the custom list."""
+        current_list = self.get_app_list()
+        # Case-insensitive check
+        if not any(app.lower() == app_name.lower() for app in current_list):
+            current_list.append(app_name)
+            self.config_manager.config['app_list'] = current_list
+            self.config_manager.has_changes = True
+            self.save()
+
+    def remove_app_from_list(self, app_name: str):
+        """Remove an application from the custom list."""
+        current_list = self.get_app_list()
+        if app_name in current_list:
+            current_list.remove(app_name)
+            self.config_manager.config['app_list'] = current_list
+            self.config_manager.has_changes = True
+            self.save()
+
 # Global instance
 settings_manager = SettingsManager()

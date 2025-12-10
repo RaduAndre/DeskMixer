@@ -129,19 +129,23 @@ class SerialController:
             if not target:
                 continue
 
-            if target == "Master":
+            # Normalize target for case-insensitive comparison
+            target_lower = target.lower()
+
+            if target_lower == "master":
                 self.audio_manager.set_master_volume(value)
-            elif target == "Microphone":
+            elif target_lower == "microphone":
                 self.audio_manager.set_mic_volume(value)
-            elif target == "System Sounds":
+            elif target_lower == "system sounds":
                 self.audio_manager.set_system_sounds_volume(value)
-            elif target == "Unbinded":
-                self.audio_manager.set_unbinded_volumes(value)
-            elif target == "Current Application":
+            elif target_lower == "unbound":
+                self.audio_manager.set_unbound_volumes(value)
+            elif target_lower == "current application":
                 self._handle_current_application_volume(value)
-            elif target == "None":
+            elif target_lower == "none":
                 pass
             else:
+                # For specific apps, use original case
                 self.audio_manager.set_app_volume(target, value)
 
     def _handle_current_application_volume(self, value):
@@ -171,6 +175,10 @@ class SerialController:
             if not self.config_manager:
                 return
 
+            # Notify UI of button press (for visual feedback)
+            if self.audio_manager:
+                self.audio_manager.notify_button_press(button_id)
+
             # Use cached config
             config = self.config_manager.config
             binding = config.get('button_bindings', {}).get(button_id)
@@ -178,30 +186,30 @@ class SerialController:
             if not binding:
                 return
 
-            action = binding.get('action')
-            target = binding.get('target')
-            keybind = binding.get('keybind')
-            app_path = binding.get('app_path')
-            output_mode = binding.get('output_mode')
-            output_device = binding.get('output_device')
-            
-            # New generic structure
+            # Extract new schema values
             value = binding.get('value')
             argument = binding.get('argument')
-
-            # Use the action handler instance
-            kwargs = {}
-            if target: kwargs['target'] = target
-            if keybind: kwargs['keys'] = keybind
-            if app_path: kwargs['app_path'] = app_path
-            if output_mode: kwargs['output_mode'] = output_mode
-            if output_device: kwargs['device_name'] = output_device
+            argument2 = binding.get('argument2')
             
-            # Pass generic values
-            if value: kwargs['value'] = value
-            if argument: kwargs['argument'] = argument
+            # Legacy fallback (if 'value' doesn't exist, try 'action' from old schema)
+            if not value:
+                value = binding.get('action')
 
-            self.action_handler.execute_action(action, **kwargs)
+            if not value:
+                return
+
+            # Pass to ActionHandler
+            # ActionHandler.execute_action now accepts action_name (which is 'value') 
+            # and generic kwargs
+            self.action_handler.execute_action(
+                value, 
+                argument=argument, 
+                argument2=argument2,
+                # Pass legacy keys just in case mixed config exists
+                target=binding.get('target'),
+                keys=binding.get('keybind'),
+                app_path=binding.get('app_path')
+            )
 
         except Exception as e:
             log_error(e, f"Error handling button {button_id}")

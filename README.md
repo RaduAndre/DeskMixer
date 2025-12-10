@@ -25,13 +25,57 @@ A physical volume mixer with programmable buttons for Windows, inspired by [Deej
 
 ## 📸 Gallery
 
-### Software Interface
-![DeskMixer UI](images/ui-screenshot.png)
-*The interface is fully scalable - add as many sliders and buttons as your hardware supports!*
+### Modern Software Interface
 
-I'm working on a new ui, for now I just have the mockups, this is the initial design.
-![DeskMixer UI2](src/ui2/mockups/main.png)
-![DeskMixer UI2](src/ui2/mockups/main+menu.png)
+DeskMixer features a sleek, modern interface with a dark theme and smooth animations designed for intuitive hardware control.
+
+![DeskMixer UI2](images/window.png)
+*Clean, modern interface with volume sliders and programmable action buttons*
+
+![DeskMixer UI2](images/menu.png)
+*Sliding configuration menu for easy customization*
+
+#### Interface Features
+
+**Visual Design:**
+- 🎨 **Modern Dark Theme**: Premium glassmorphic design with smooth gradients and animations
+- 🪟 **Frameless Window**: Custom title bar with drag-to-move functionality
+- 📐 **Scalable Layout**: Automatically adapts to any number of sliders and buttons
+- ✨ **Smooth Animations**: Fluid transitions and visual feedback for all interactions
+
+**Volume Sliders:**
+- 🎛️ **Visual Scale Indicators**: Each slider displays a scale icon showing the full range
+- 🏷️ **Smart Labels**: Automatically display bound applications (e.g., "Master + Spotify")
+- 💚 **Hardware Sync**: Sliders animate smoothly when adjusted via hardware with green highlight feedback
+- 🔄 **Drag-and-Drop Reordering**: Rearrange sliders to match your preferred layout
+- 🖱️ **Click-to-Configure**: Click any slider to open its configuration menu
+
+**Action Buttons:**
+- 🎮 **Customizable Grid**: Arrange buttons in any grid size (rows × columns)
+- 🔵 **Active State Indicators**: Blue highlight shows which buttons are configured
+- ⚡ **Hardware Feedback**: Buttons flash when pressed on the physical device
+- 🔄 **Drag-and-Drop**: Reorder buttons including empty placeholder positions
+- 📝 **Dynamic Labels**: Button text adjusts to show the configured action
+
+**Configuration Menu:**
+- 📱 **Sliding Panel**: Smooth slide-in menu from the right side
+- 🎯 **Context-Sensitive**: Different menus for sliders, buttons, and settings
+- 🔍 **Live Search**: Browse and add applications with file picker integration
+- 📋 **Expandable Sections**: Organized categories with collapsible headers
+- ✅ **Visual Selection**: Active bindings highlighted with checkmarks
+
+**Settings & Customization:**
+- ⚙️ **General Settings**: Start hidden, Windows startup integration, slider sampling modes
+- 📐 **Layout Controls**: Configure button grid dimensions (R×C)
+- 🔄 **Reorder Modes**: Toggle swap modes for buttons or sliders independently
+- 📊 **Slider Sampling**: Choose between Soft, Normal, or Hard sensitivity modes
+- ℹ️ **Version Display**: Build version shown at bottom of settings menu
+
+**Hardware Integration:**
+- 🔌 **Real-time Sync**: Slider positions update instantly from hardware movements
+- 🎯 **Button Press Feedback**: Visual flash confirms hardware button presses
+- 🔄 **Bidirectional Control**: Changes sync between hardware and software
+- 🚫 **Read-only Sliders**: UI sliders display-only to prevent conflicts with hardware control
 
 
 ### DIY Hardware Build
@@ -232,32 +276,91 @@ python main.py
 ### First-Time Setup
 
 1. **Launch DeskMixer**
-2. **Navigate to Configuration tab**
-3. **Select COM Port**: Choose your Arduino's serial port from the dropdown
-4. **Configure Sliders**: 
-   - Click on each slider dropdown
-   - Assign to Master, Microphone, System Sounds, or specific applications
+2. **Connect Hardware**: The application will automatically detect your Arduino's serial port
+3. **Configure Sliders**: 
+   - Click on any slider to open the configuration menu
+   - Select from General options (Master, Microphone, System sounds, Focused application, Unbound)
+   - Or choose from Active sounds (currently running applications)
+   - Or add custom applications via the search function
+   - Multiple applications can be bound to the same slider
+4. **Configure Buttons**:
+   - Click on any button to open the action menu
+   - Select from Media Controls (Play/Pause, Next, Previous, etc.)
+   - Configure Mute actions with specific targets
+   - Set up custom Keybinds or Launch app actions
    - Changes save automatically
-5. **Configure Buttons**:
-   - Select an action for each button
-   - Set target applications if applicable
-   - Test immediately - no restart needed!
 
 ### Slider Configuration
-- Assign each slider to any audio source
-- Multiple applications can share the same slider
-- Mix and match: dedicate some sliders to specific apps, leave others flexible
-- The **Current Application** target dynamically follows your active window
+
+**Binding Options:**
+- **General Targets**: Master volume, Microphone, System sounds, Focused application, Unbound
+- **Active Sounds**: Dynamically detected running applications with audio
+- **Custom Applications**: Add any application via name search or file browser
+- **Multiple Bindings**: Bind multiple applications to a single slider for grouped control
+- **Smart Labels**: Slider labels automatically update to show all bound applications
+
+**Configuration Menu:**
+- Click any slider to open its dedicated configuration menu
+- Expandable sections organize options by category
+- Active bindings show checkmarks for easy identification
+- Right-click custom applications to delete them from the list
+- Browse for .exe or .lnk files to add new applications
 
 ### Button Configuration
-- Each button can have a different action
-- Combine actions with targets for app-specific control
-- Chain multiple shortcuts using custom keybinds
+
+**Available Actions:**
+
+*Media Controls:*
+- Play/Pause, Previous, Next
+- Volume up/down
+- Seek backward/forward
+
+*Advanced Actions:*
+- **Mute**: Choose target (Master, Microphone, System sounds, Focused application)
+- **Switch Audio Output**: Cycle through devices or select specific output (Speakers, Headphones)
+- **Keybind**: Enter custom keyboard shortcuts (see [KEYBIND_EXAMPLES.md](KEYBIND_EXAMPLES.md))
+- **Launch app**: Browse and select applications to launch or focus
+
+**Configuration Menu:**
+- Click any button to open its action menu
+- Expandable items reveal sub-options (e.g., Mute → Master/Microphone/etc.)
+- Input fields for Keybind and Launch app actions
+- File browser integration for selecting applications
+- Active action highlighted with blue indicator
+
+### Layout Customization
+
+**Button Grid:**
+- Open Settings menu (gear icon)
+- Navigate to Layout → Grid Size
+- Enter desired Rows (R) and Columns (C)
+- Grid automatically validates against available buttons
+- Invalid dimensions flash red with error feedback
+
+**Reordering Elements:**
+- Open Settings → Layout → Reorder Elements
+- Select "Swap Buttons" or "Swap Sliders" to enter reorder mode
+- Drag and drop elements to rearrange them
+- Supports sparse layouts (buttons can occupy any grid position)
+- Click the reorder option again to exit reorder mode
+
+### Settings Menu
+
+Access via the gear icon in the top-right corner:
+
+**General:**
+- **Start Hidden (on tray)**: Launch minimized to system tray
+- **Start on Windows startup**: Automatically launch with Windows
+- **Slider Sampling**: Adjust hardware sensitivity (Soft/Normal/Hard)
+
+**Layout:**
+- **Grid Size**: Configure button grid dimensions
+- **Reorder Elements**: Enable drag-and-drop for buttons or sliders
 
 ### System Tray
 - **Double-click** tray icon: Show/hide main window
 - **Right-click** tray icon: Quick actions menu
-- **Settings**: Enable "Start Hidden (in Tray)" to launch minimized
+- Window automatically minimizes to tray when closed
 
 ---
 

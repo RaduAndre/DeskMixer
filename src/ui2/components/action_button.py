@@ -18,7 +18,7 @@ class ActionButton(QPushButton):
     
     # Signal emitted when dropped: source_index, target_index
     dropped = Signal(int, int) 
-    variableChanged = Signal(dict)
+    variableChanged = Signal(object)
     
     def __init__(self, icon_name: str, text: str, index: int = -1, parent=None):
         super().__init__(parent)
@@ -137,6 +137,8 @@ class ActionButton(QPushButton):
         """Update stylesheet based on active state."""
         # Only allow active styling if we have a variable set (not None/ghost)
         show_active = self._is_active
+        is_highlighted = getattr(self, '_is_highlighted', False)
+        
         if self.is_placeholder:
              # Placeholder Style (Normal Mode) -> Invisible but takes space
              self.setStyleSheet("""
@@ -150,6 +152,20 @@ class ActionButton(QPushButton):
              self.text_label.hide()
         elif show_active:
             # Active state: accent background, no border
+            # If highlighted (pressed), maybe make it brighter or just keep active?
+            # User request: "highlight ... as it does now when i hover"
+            # Active hover style (defined below) is same as Active (ACCENT).
+            # Maybe we should invert or flash?
+            # Current stylesheet says:
+            # QPushButton:hover { background-color: {colors.ACCENT}; }
+            # So active hover is same as active.
+            # But "highlight for a little" implies visual feedback.
+            # If button is active, pressing it toggles to inactive.
+            # The transition handles the visual change.
+            # But the user asked for specific highlight.
+            # Let's trust the "hover" definition. If hover is same, then so be it.
+            # But for Inactive buttons using hover style IS a change.
+            
             self.icon_label.show()
             self.text_label.show()
             self.setStyleSheet(f"""
@@ -172,12 +188,17 @@ class ActionButton(QPushButton):
             """)
         else:
             # Normal state: black background, border
+            # If highlighted, force hover style: background #1a1a1a, border ACCENT
+            
+            bg_color = "#1a1a1a" if is_highlighted else colors.BLACK
+            border_part = f"border: 1px solid {colors.ACCENT};" if is_highlighted else f"border: 1px solid {colors.BORDER};"
+            
             self.icon_label.show()
             self.text_label.show()
             self.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {colors.BLACK};
-                    border: 1px solid {colors.BORDER};
+                    background-color: {bg_color};
+                    {border_part}
                     border-radius: 18px;
                 }}
                 QPushButton:hover {{
@@ -196,7 +217,19 @@ class ActionButton(QPushButton):
         
         self.update_icon()
         self.adjust_font_size()
-    
+
+    def highlight(self, duration: int = 200):
+        """Temporarily highlight the button."""
+        self._is_highlighted = True
+        self.update_style()
+        
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(duration, self._end_highlight)
+        
+    def _end_highlight(self):
+        self._is_highlighted = False
+        self.update_style()
+
     def set_active(self, active: bool):
         """Set active state and update appearance."""
         self._is_active = active
@@ -218,6 +251,9 @@ class ActionButton(QPushButton):
             self._drag_start_pos = event.pos()
             if not self._reorder_mode:
                  self.toggle_active()
+                 # Trigger highlight visual feedback
+                 self.highlight(200)
+                 
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):

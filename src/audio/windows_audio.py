@@ -14,7 +14,7 @@ class WindowsAudioDriver(AudioDriver):
         self.master_volume = None
         self.mic_volume = None
         self.app_sessions = {}  # Stores lists of volume interfaces
-        self.system_sounds_session = None
+        self.system_sounds_sessions = []
         self.current_device_id = None
         self._com_initialized = False
         self.monitor_running = False
@@ -163,16 +163,37 @@ class WindowsAudioDriver(AudioDriver):
     def _refresh_system_sounds_session(self):
         def refresh_system_sounds_operation():
             sessions = AudioUtilities.GetAllSessions()
+            self.system_sounds_sessions = []
+            
+            # Helper to check if session is already added
+            def is_new(s):
+                # Simple check, could be more robust with ID comparison if available
+                return True 
+
+            # Collect ALL candidates
             for session in sessions:
+                is_match = False
                 try:
-                    if session.Process is None or session.Process.name() is None:
-                        volume_interface = session._ctl.QueryInterface(ISimpleAudioVolume)
-                        self.system_sounds_session = volume_interface
-                        return True
-                except Exception as e:
-                    log_error(e, "Error checking system sounds session")
-                    continue
-            return False
+                    # Strategy 1: Display Name
+                    if session.DisplayName and "System Sounds" in session.DisplayName:
+                        is_match = True
+                    # Strategy 2: Known Process
+                    elif session.Process and session.Process.name():
+                        name = session.Process.name().lower()
+                        if any(proc in name for proc in ["audiosrv", "sndvol.exe", "shellexperiencehost.exe"]):
+                            is_match = True
+                    # Strategy 3: No Process
+                    elif session.Process is None:
+                        is_match = True
+                    
+                    if is_match:
+                        try:
+                            valid_session = session._ctl.QueryInterface(ISimpleAudioVolume)
+                            self.system_sounds_sessions.append(valid_session)
+                        except: pass
+                except: continue
+
+            return len(self.system_sounds_sessions) > 0
 
         return self._safe_com_operation(
             refresh_system_sounds_operation,
@@ -243,31 +264,51 @@ class WindowsAudioDriver(AudioDriver):
         self.last_set_volumes["System Sounds"] = level
 
         def set_system_volume_operation():
-            if self.system_sounds_session:
-                try:
-                    self.system_sounds_session.SetMasterVolume(level, None)
-                    return True
-                except:
-                    self.system_sounds_session = None
+            success_count = 0
+            
+            if self.system_sounds_sessions:
+                # Try setting on existing sessions
+                active_sessions = []
+                for session in self.system_sounds_sessions:
+                    try:
+                        session.SetMasterVolume(level, None)
+                        active_sessions.append(session)
+                        success_count += 1
+                    except:
+                        pass # stale session
+                self.system_sounds_sessions = active_sessions
 
-            if self._refresh_system_sounds_session():
-                try:
-                    self.system_sounds_session.SetMasterVolume(level, None)
-                    return True
-                except Exception as e:
-                    log_error(e, "Error setting system sounds volume after refresh")
+            # If no success or empty, refresh and try again
+            if success_count == 0:
+                if self._refresh_system_sounds_session():
+                    for session in self.system_sounds_sessions:
+                        try:
+                            session.SetMasterVolume(level, None)
+                            success_count += 1
+                        except Exception as e:
+                            log_error(e, "Error setting system sounds volume after refresh")
+
+            return success_count > 0
             
             # Fallback
             self.get_all_audio_apps()
-            for app_name in ["AudioSrv.Dll", "System Sounds", "svchost.exe"]:
-                if app_name in self.app_sessions:
+            target_names = ["audiosrv.dll", "system sounds", "svchost.exe"]
+            
+            # Create mapping for lower-case keys
+            lower_session_map = {k.lower(): k for k in self.app_sessions.keys()}
+            
+            found_any = False
+            for target in target_names:
+                real_key = lower_session_map.get(target)
+                if real_key:
                     try:
-                        for session in self.app_sessions[app_name]:
+                        for session in self.app_sessions[real_key]:
                             session.SetMasterVolume(level, None)
-                        return True
+                        found_any = True
                     except Exception as e:
-                        log_error(e, f"Error setting volume for {app_name}")
-            return False
+                        log_error(e, f"Error setting volume for {real_key}")
+            
+            return found_any
 
         return self._safe_com_operation(
             set_system_volume_operation,
@@ -278,14 +319,26 @@ class WindowsAudioDriver(AudioDriver):
     def set_app_volume(self, app_name, level):
         if app_name not in self.app_sessions:
             self.get_all_audio_apps()
-
+            
+        # Case-insensitive lookup
+        target_key = None
         if app_name in self.app_sessions:
-            last_level = self.last_set_volumes.get(app_name, -1)
+            target_key = app_name
+        else:
+            # Try finding a case-insensitive match
+            lower_name = app_name.lower()
+            for key in self.app_sessions:
+                if key.lower() == lower_name:
+                    target_key = key
+                    break
+        
+        if target_key:
+            last_level = self.last_set_volumes.get(target_key, -1)
             if abs(level - last_level) < self.VOLUME_TOLERANCE:
                 return True
 
-            self.last_set_volumes[app_name] = level
-            sessions = self.app_sessions[app_name]
+            self.last_set_volumes[target_key] = level
+            sessions = self.app_sessions[target_key]
             success_count = 0
 
             for session in sessions:
@@ -295,7 +348,7 @@ class WindowsAudioDriver(AudioDriver):
 
                 success = self._safe_com_operation(
                     lambda: set_volume_operation(),
-                    f"set volume for {app_name}",
+                    f"set volume for {target_key}",
                     default_return=False
                 )
                 if success:
@@ -327,19 +380,30 @@ class WindowsAudioDriver(AudioDriver):
             return False
 
     def toggle_app_mute(self, app_name):
+        # Case-insensitive lookup
+        target_key = None
         if app_name in self.app_sessions:
-            sessions = self.app_sessions[app_name]
+            target_key = app_name
+        else:
+            lower_name = app_name.lower()
+            for key in self.app_sessions:
+                if key.lower() == lower_name:
+                    target_key = key
+                    break
+        
+        if target_key:
+            sessions = self.app_sessions[target_key]
             if len(sessions) > 0:
                 def get_mute_operation():
                     return sessions[0].GetMute()
                 
                 try:
-                    current_mute = self._safe_com_operation(get_mute_operation, f"get mute {app_name}", default_return=False)
+                    current_mute = self._safe_com_operation(get_mute_operation, f"get mute {target_key}", default_return=False)
                 except:
                     self.get_all_audio_apps()
-                    if app_name not in self.app_sessions: return False
-                    sessions = self.app_sessions[app_name]
-                    current_mute = self._safe_com_operation(get_mute_operation, f"get mute {app_name}", default_return=False)
+                    if target_key not in self.app_sessions: return False
+                    sessions = self.app_sessions[target_key]
+                    current_mute = self._safe_com_operation(get_mute_operation, f"get mute {target_key}", default_return=False)
 
                 new_mute = not current_mute
                 success_count = 0
@@ -348,7 +412,7 @@ class WindowsAudioDriver(AudioDriver):
                         session_obj.SetMute(new_mute, None)
                         return True
                     
-                    if self._safe_com_operation(lambda: set_mute_operation(), f"set mute {app_name}", default_return=False):
+                    if self._safe_com_operation(lambda: set_mute_operation(), f"set mute {target_key}", default_return=False):
                         success_count += 1
                 
                 return success_count > 0
@@ -356,30 +420,74 @@ class WindowsAudioDriver(AudioDriver):
 
     def get_app_mute(self, app_name):
         """Get mute state for a specific application"""
+        # Case-insensitive lookup
+        target_key = None
         if app_name in self.app_sessions:
-            sessions = self.app_sessions[app_name]
+            target_key = app_name
+        else:
+            lower_name = app_name.lower()
+            for key in self.app_sessions:
+                if key.lower() == lower_name:
+                    target_key = key
+                    break
+                    
+        if target_key:
+            sessions = self.app_sessions[target_key]
             if len(sessions) > 0:
                 def get_mute_operation():
                     return sessions[0].GetMute()
                 
-                return self._safe_com_operation(get_mute_operation, f"get mute {app_name}", default_return=False)
+                return self._safe_com_operation(get_mute_operation, f"get mute {target_key}", default_return=False)
         return False
 
     def toggle_system_sounds_mute(self):
         """Toggle mute for system sounds"""
         def toggle_sys_mute_operation():
-            if self.system_sounds_session:
-                current = self.system_sounds_session.GetMute()
-                self.system_sounds_session.SetMute(not current, None)
-                return True
+            success_count = 0
+            found_any = False
             
-            # Try to refresh if session is missing
-            if self._refresh_system_sounds_session():
-                current = self.system_sounds_session.GetMute()
-                self.system_sounds_session.SetMute(not current, None)
-                return True
-                
+            # Refresh to be sure we have latest state
+            self._refresh_system_sounds_session()
+            
+            if self.system_sounds_sessions:
+                try:
+                    # Get state from first valid one
+                    current = self.system_sounds_sessions[0].GetMute()
+                    new_mute = not current
+                    
+                    for session in self.system_sounds_sessions:
+                        try:
+                            session.SetMute(new_mute, None)
+                            success_count += 1
+                        except: pass
+                    
+                    if success_count > 0:
+                         return True
+                except: pass
+             
             return False
+                
+            # Fallback (Consistency with set_system_sounds_volume)
+            self.get_all_audio_apps()
+            target_names = ["audiosrv.dll", "system sounds", "svchost.exe"]
+            lower_session_map = {k.lower(): k for k in self.app_sessions.keys()}
+            
+            found_any = False
+            for target in target_names:
+                real_key = lower_session_map.get(target)
+                if real_key:
+                    try:
+                        sessions = self.app_sessions[real_key]
+                        if len(sessions) > 0:
+                            # Use first session to determine current state
+                            current = sessions[0].GetMute()
+                            for session in sessions:
+                                session.SetMute(not current, None)
+                            found_any = True
+                    except Exception as e:
+                        log_error(e, f"Error toggling mute for {real_key}")
+            
+            return found_any
 
         return self._safe_com_operation(
             toggle_sys_mute_operation, 
@@ -444,7 +552,7 @@ class WindowsAudioDriver(AudioDriver):
             self.device_monitor_thread.join(timeout=2.0)
         
         self.app_sessions.clear()
-        self.system_sounds_session = None
+        self.system_sounds_sessions = []
         self.master_volume = None
         self.mic_volume = None
         

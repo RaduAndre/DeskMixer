@@ -4,6 +4,7 @@ Menu builder for constructing menu content dynamically.
 
 import sys
 import os
+import re
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame
@@ -15,6 +16,14 @@ from ui2.components.input_item import InputItem
 from ui2.components.browse_item import BrowseItem
 from ui2.settings_manager import settings_manager
 from ui2.icon_manager import icon_manager # For consistent action names if needed
+from utils import system_startup
+from PySide6.QtWidgets import QFileDialog, QMenu
+from PySide6.QtGui import QAction, QCursor
+
+try:
+    import win32com.client
+except ImportError:
+    win32com = None
 
 
 
@@ -100,9 +109,9 @@ class MenuBuilder:
             header.clicked.connect(lambda: self.toggle_section(text))
     
     def add_item(self, text: str, level: int = 0, selected: bool = False, 
-                 is_expandable: bool = False, is_default: bool = False, callback=None) -> MenuItem:
+                 is_expandable: bool = False, is_default: bool = False, extra_margin: int = 0, on_right_click=None, callback=None) -> MenuItem:
         """Add a menu item."""
-        item = MenuItem(text, level=level, selected=selected, is_expandable=is_expandable, is_default=is_default)
+        item = MenuItem(text, level=level, selected=selected, is_expandable=is_expandable, is_default=is_default, extra_margin=extra_margin, on_right_click=on_right_click)
         
         # Connect internal toggle signal for expandable items
         if is_expandable:
@@ -166,12 +175,17 @@ class MenuBuilder:
 
         target_layout.addWidget(item)
         self.menu_items.append(item)
+        
+        # FIX: If item is initialized as selected and has a parent, update parent state immediately
+        if level == 1 and selected and self.current_parent_item:
+            self.current_parent_item.set_has_active_child(True)
+            
         return item
     
     
-    def add_input_item(self, placeholder: str, initial_value: str = "", level: int = 0, callback=None) -> InputItem:
+    def add_input_item(self, placeholder: str, initial_value: str = "", level: int = 0, show_icon: bool = True, icon_name: str = "record.svg", icon_callback=None, callback=None) -> InputItem:
         """Add an input menu item."""
-        item = InputItem(placeholder, initial_value, level=level)
+        item = InputItem(placeholder, initial_value, level=level, show_icon=show_icon, icon_name=icon_name, icon_callback=icon_callback)
         
         if callback:
             item.value_changed.connect(callback)
@@ -219,7 +233,7 @@ class MenuBuilder:
         item_hidden.clicked.connect(lambda: self._toggle_setting_hidden(item_hidden))
         
         # Start on Startup
-        is_startup = settings_manager.get_start_on_startup() == 1
+        is_startup = system_startup.check_startup_status()
         item_startup = self.add_item("Start on Windows startup", selected=is_startup)
         item_startup.clicked.connect(lambda: self._toggle_setting_startup(item_startup))
         
@@ -250,8 +264,8 @@ class MenuBuilder:
         row_val = str(current_rows) if current_rows > 0 else ""
         col_val = str(current_cols) if current_cols > 0 else ""
         
-        row_input = self.add_input_item("Rows (R)", initial_value=row_val, level=1)
-        col_input = self.add_input_item("Cols (C)", initial_value=col_val, level=1)
+        row_input = self.add_input_item("Rows (R)", initial_value=row_val, level=1, show_icon=False)
+        col_input = self.add_input_item("Cols (C)", initial_value=col_val, level=1, show_icon=False)
         
         def validate_and_set_grid(val):
             # Check both inputs
@@ -328,6 +342,32 @@ class MenuBuilder:
 
         reorder_btns.clicked.connect(toggle_reorder_buttons)
         reorder_sliders.clicked.connect(toggle_reorder_sliders)
+
+        # Add Version Label
+        self.content_layout.addStretch()
+        
+        version_text = "DeskMixer build unknown"
+        try:
+            # Path to version_info.txt relative to this file: ../build/version_info.txt
+            current_dir = os.path.dirname(__file__)
+            version_file = os.path.abspath(os.path.join(current_dir, '..', 'build', 'version_info.txt'))
+            
+            if os.path.exists(version_file):
+                with open(version_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    # Look for prodvers=(1, 1, 0, 0)
+                    match = re.search(r'prodvers=\s*\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\s*\)', content)
+                    if match:
+                        v1, v2, v3, v4 = match.groups()
+                        version_text = f"DeskMixer build {v1}.{v2}.{v3}.{v4}"
+        except Exception as e:
+            print(f"Error reading version info: {e}")
+
+        version_label = QLabel(version_text)
+        version_label.setAlignment(Qt.AlignCenter)
+        # Final Style: White color
+        version_label.setStyleSheet("color: white; margin-top: 10px; margin-bottom: 0px;")
+        self.content_layout.addWidget(version_label)
         
     def _toggle_setting_hidden(self, item):
         new_val = 0 if settings_manager.get_start_hidden() == 1 else 1
@@ -335,9 +375,25 @@ class MenuBuilder:
         item.set_selected(new_val == 1)
 
     def _toggle_setting_startup(self, item):
-        new_val = 0 if settings_manager.get_start_on_startup() == 1 else 1
-        settings_manager.set_start_on_startup(new_val)
-        item.set_selected(new_val == 1)
+        # Initial check
+        current_status = system_startup.check_startup_status()
+        new_val = not current_status
+        
+        # specific for system_startup which returns success bool
+        success = system_startup.set_startup(new_val)
+        
+        if success:
+             # Just invert selection if success
+             # Double check status or just trust? 
+             # Trusting set_startup logic or re-checking?
+             # Re-checking is safer but might be overkill.
+             # Let's just update UI based on intent if success.
+             item.set_selected(new_val)
+        else:
+             # Failed? Maybe flash error?
+             print("Failed to change startup settings")
+             if hasattr(item, 'flash_error'):
+                 item.flash_error()
 
     # Removed _set_alignment helper as it's no longer used
 
@@ -356,9 +412,9 @@ class MenuBuilder:
         self.clear()
         
         # Helper to create toggleable item
-        def add_toggle_item(name, value, argument=None, level=0, parent=None):
+        def add_toggle_item(name, value, argument=None, level=0, extra_margin=0, on_right_click=None, parent=None):
             is_selected = target_slider.has_variable(value, argument)
-            item = self.add_item(name, level=level, selected=is_selected)
+            item = self.add_item(name, level=level, selected=is_selected, extra_margin=extra_margin, on_right_click=on_right_click)
             # Custom click handler for toggle
             item.clicked.connect(lambda: self._handle_slider_toggle(item, target_slider, value, argument))
             return item
@@ -402,7 +458,98 @@ class MenuBuilder:
         # add_toggle_item("Discord", "Discord")
         
         self.add_head("Other applications", expandable=True, expanded=True)
-        self.add_item("Select other applications") # Placeholder
+        
+        # Load and display saved custom apps
+        saved_apps = settings_manager.get_app_list()
+        if saved_apps:
+            
+            def create_delete_handler(app_name):
+                 def on_right_click(pos):
+                     # Use content_layout's parent widget as parent for menu
+                     parent_widget = self.content_layout.parentWidget()
+                     menu = QMenu(parent_widget) 
+                     delete_action = QAction(f"Delete '{app_name}'", menu)
+                     delete_action.triggered.connect(lambda: delete_app(app_name))
+                     menu.addAction(delete_action)
+                     
+                     # Simple styling for the context menu to match dark theme
+                     menu.setStyleSheet(f"""
+                        QMenu {{
+                            background-color: #1E1E1E;
+                            color: #FFFFFF;
+                            border: 1px solid #333333;
+                        }}
+                        QMenu::item {{
+                            padding: 5px 20px;
+                        }}
+                        QMenu::item:selected {{
+                            background-color: #333333;
+                        }}
+                     """)
+                     
+                     menu.exec(pos)
+                 return on_right_click
+
+            def delete_app(app_name):
+                settings_manager.remove_app_from_list(app_name)
+                # Refresh menu
+                self.build_slider_menu(target_slider)
+            
+            for app_name in saved_apps:
+                # Add check if it's already added to avoid dupes if logic fails, but loop is clean
+                if not target_slider.has_variable(app_name): # Optional check?
+                    pass
+                add_toggle_item(app_name, app_name, extra_margin=20, on_right_click=create_delete_handler(app_name))
+        
+        # Input for new application
+        def on_new_app_text(text):
+            if text and text.strip():
+                clean_text = text.strip()
+                settings_manager.add_app_to_list(clean_text)
+                # Refresh menu to show new item
+                self.build_slider_menu(target_slider)
+                
+        def on_browse_click():
+            file_dialog = QFileDialog()
+            file_name, _ = file_dialog.getOpenFileName(None, "Select Application", "", "Executables (*.exe);;Shortcuts (*.lnk);;All Files (*)")
+            
+            if file_name:
+                app_name = ""
+                # Check extension
+                _, ext = os.path.splitext(file_name)
+                if ext.lower() == '.lnk':
+                    # Resolve shortcut
+                    if win32com:
+                        try:
+                            shell = win32com.client.Dispatch("WScript.Shell")
+                            shortcut = shell.CreateShortCut(file_name)
+                            target_path = shortcut.Targetpath
+                            # Get exe name from target path
+                            img_name = os.path.basename(target_path)
+                            app_name = img_name
+                        except Exception as e:
+                            print(f"Error resolving shortcut: {e}")
+                            # Fallback to shortcut filename
+                            app_name = os.path.basename(file_name)
+                    else:
+                        # Fallback
+                        app_name = os.path.basename(file_name)
+                elif ext.lower() == '.exe':
+                    app_name = os.path.basename(file_name)
+                else:
+                    # Generic fallback
+                    app_name = os.path.basename(file_name)
+                
+                if app_name:
+                    # Clean/Capitalize? 
+                    # User request: "save that name in a list... variables... listed in the menu"
+                    settings_manager.add_app_to_list(app_name)
+                    # Refresh
+                    self.build_slider_menu(target_slider)
+
+        
+        input_item = self.add_input_item("Select new application", initial_value="", level=0, show_icon=True, icon_name="search.svg", icon_callback=on_browse_click)
+        input_item.value_changed.connect(on_new_app_text)
 
     def _handle_slider_toggle(self, item, slider, value, argument):
         # Check if we are trying to ENABLE the variable (it's currently not active)
@@ -457,6 +604,8 @@ class MenuBuilder:
         add_action_item("Volume down", "Volume down")
         add_action_item("Seek backward", "Seek backward")
         add_action_item("Seek forward", "Seek forward")
+
+        self.add_head("Actions", expandable=True, expanded=True)
         
         # Mute with expandable sub-options
         mute_item = self.add_item("Mute", is_expandable=True)
@@ -790,6 +939,10 @@ class MenuBuilder:
             child = self.default_children[parent_item]
             # Use emit to trigger whatever handler is attached (slider/button specific or generic)
             child.clicked.emit()
+        else:
+            # Fallback: Toggle expansion if no default child
+            if hasattr(parent_item, 'toggle_expanded'):
+                parent_item.toggle_expanded()
     
     def handle_item_clicked(self, clicked_item: MenuItem):
         """Handle menu item selection logic."""

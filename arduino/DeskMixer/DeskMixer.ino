@@ -2,8 +2,8 @@
 const int NUM_SLIDERS = 4;
 const int NUM_BUTTONS = 6;
 
-const int analogInputs[NUM_SLIDERS] = {34, 35, 32, 33};
-const int buttonInputs[NUM_BUTTONS] = {13, 12, 26, 14, 25, 27};
+const int analogInputs[NUM_SLIDERS] = {33, 32, 35, 34};
+const int buttonInputs[NUM_BUTTONS] = {12, 13, 14, 26, 27, 25};
 
 // Define the interval (in milliseconds) for sending slider data
 const long SEND_INTERVAL_MS = 10;

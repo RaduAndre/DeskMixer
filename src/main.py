@@ -87,6 +87,20 @@ def run_app():
     
     if core.serial_handler:
         core.serial_handler.add_status_callback(status_bridge)
+        
+    # Bridge AudioManager volume updates to MainWindow (Thread-safe via Signal)
+    def volume_bridge(target, volume):
+        main_window.volume_update_signal.emit(target, volume)
+        
+    if core.audio_manager:
+        core.audio_manager.add_volume_callback(volume_bridge)
+        
+    # Bridge AudioManager button press to MainWindow (Thread-safe via Signal)
+    def button_press_bridge(button_id):
+        main_window.button_press_signal.emit(button_id)
+        
+    if core.audio_manager:
+        core.audio_manager.add_button_press_callback(button_press_bridge)
 
     # Determine if we should start hidden based on config
     # Core uses ConfigManager, which is what we want.

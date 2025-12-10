@@ -1,0 +1,33 @@
+Enumerating Audio Sessions...
+Found 4 sessions.
+
+Session 0:
+  DisplayName: '@%SystemRoot%\System32\AudioSrv.Dll,-202'
+  Process: None
+  Current Volume: 1.0
+  Is Muted: 0
+------------------------------
+
+Session 1:
+  DisplayName: ''
+  Process Name: Discord.exe
+  PID: 17716
+  Current Volume: 1.0
+  Is Muted: 0
+------------------------------
+
+Session 2:
+  DisplayName: 'Mozilla Firefox'
+  Process Name: firefox.exe
+  PID: 22336
+  Current Volume: 0.26001954078674316
+  Is Muted: 0
+------------------------------
+
+Session 3:
+  DisplayName: ''
+  Process Name: Antigravity.exe
+  PID: 22456
+  Current Volume: 1.0
+  Is Muted: 0
+------------------------------

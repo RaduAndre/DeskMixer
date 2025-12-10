@@ -253,10 +253,31 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             except:
                 pass
 
-    def execute_action(self, action_type, **kwargs):
-        """Execute a specific action"""
+    # Mapping of Display Name -> Internal Action Type
+    ACTION_MAP = {
+        "Play/Pause": "play_pause",
+        "Play": "play",
+        "Pause": "pause",
+        "Next": "next_track",
+        "Previous": "previous_track",
+        "Seek Forward": "seek_forward",
+        "Seek Backward": "seek_backward",
+        "Volume Up": "volume_up",
+        "Volume Down": "volume_down",
+        "Mute": "mute",
+        "Switch Audio Output": "switch_audio_output",
+        "Keybind": "keybind",
+        "Launch app": "launch_app",
+    }
+
+    def execute_action(self, action_name, **kwargs):
+        """Execute a specific action by name (display name or internal type)"""
         try:
-            action_map = {
+            # Resolve action type from map if possible
+            action_type = self.ACTION_MAP.get(action_name, action_name)
+            
+            # Legacy/Internal function mapping
+            func_map = {
                 'play_pause': self.play_pause,
                 'play': self.play,
                 'pause': self.pause,
@@ -272,15 +293,15 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
                 'launch_app': self.launch_app,
             }
 
-            action = action_map.get(action_type)
+            action = func_map.get(action_type)
             if action:
                 return action(**kwargs)
             else:
-                log_error(ValueError(f"Unknown action: {action_type}"), "Invalid action")
+                log_error(ValueError(f"Unknown action: {action_name} (mapped to {action_type})"), "Invalid action")
                 return False
 
         except Exception as e:
-            log_error(e, f"Error executing action: {action_type}")
+            log_error(e, f"Error executing action: {action_name}")
             return False
 
     def play_pause(self, **kwargs):
@@ -388,13 +409,15 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             if not self.audio_manager:
                 return False
 
-            if not self.audio_manager:
-                return False
-
-            # Support generic value/argument structure
-            target = kwargs.get('target')
+            # Schema mapping:
+            # value = "Mute"
+            # argument = target (e.g. "Master", "Microphone", "Specific App Name")
+            
+            target = kwargs.get('argument') or kwargs.get('target')
+            
+            # Legacy/Fallback
             if not target:
-                 target = kwargs.get('value') or kwargs.get('argument') or 'Master'
+                 target = 'Master'
             
             # Handle empty target as Master
             if not target or target == "None":
@@ -408,8 +431,8 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
                 self.audio_manager.toggle_system_sounds_mute()
             elif target == "Current Application":
                 self.audio_manager.toggle_current_app_mute()
-            elif target == "Unbinded":
-                self.audio_manager.toggle_unbinded_mute()
+            elif target == "Unbound":
+                self.audio_manager.toggle_unbound_mute()
             else:
                 # Specific app
                 self.audio_manager.toggle_app_mute(target)
@@ -420,12 +443,7 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
             return False
 
     def switch_audio_output(self, output_mode="cycle", device_name=None, **kwargs):
-        """Switch audio output device
-
-        Args:
-            output_mode: "cycle" to cycle through devices, "select" to choose specific device
-            device_name: Name of device to select (only used when output_mode="select")
-        """
+        """Switch audio output device"""
         try:
             # Check if AudioDeviceCmdlets is installed on Windows
             if not self._check_audio_cmdlets():
@@ -438,14 +456,28 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
                 get_device_names
             )
 
-            # Support generic binding structure
-            if not device_name:
-                device_name = kwargs.get('value') or kwargs.get('argument')
-                
-            if output_mode == "cycle":
+            # Schema mappping:
+            # value = "Switch Audio Output"
+            # argument = "Cycle Through" OR Device Name (for select mode)
+            
+            arg = kwargs.get('argument')
+            
+            # Determine mode based on argument
+            if arg == "Cycle Through" or arg is None:
+                final_mode = "cycle"
+                final_device = None
+            else:
+                final_mode = "select"
+                final_device = arg
+
+            # Allow direct overrides if provided via kwargs (legacy)
+            if kwargs.get('output_mode'): final_mode = kwargs.get('output_mode')
+            if device_name: final_device = device_name
+            
+            if final_mode == "cycle":
                 return cycle_audio_device()
 
-            elif output_mode == "select" and device_name:
+            elif final_mode == "select" and final_device:
                 # Verify device exists by checking available names
                 available_names = get_device_names()
 
@@ -453,12 +485,11 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
                     log_error(ValueError("No audio devices found"), "Cannot switch audio output")
                     return False
 
-                if device_name not in available_names:
-                    log_error(ValueError(f"Device not found: {device_name}"), "Cannot switch audio output")
+                if final_device not in available_names:
+                    log_error(ValueError(f"Device not found: {final_device}"), "Cannot switch audio output")
                     return False
 
-                # Set device by name (the new API handles this directly)
-                return set_audio_device(device_name)
+                return set_audio_device(final_device)
 
             else:
                 return False
@@ -497,27 +528,40 @@ https://github.com/frgnca/AudioDeviceCmdlets"""
     def launch_app(self, app_path=None, **kwargs):
         """Launch an application by path or name"""
         try:
-            # Support generic binding structure
-            if not app_path:
-                app_path = kwargs.get('value') or kwargs.get('argument')
+            # Schema mapping:
+            # value = "Launch app"
+            # argument = Display Name (e.g. "Chrome")
+            # argument2 = Exe Path / Command (e.g. "C:\Path\To\Chrome.exe" --arg)
+            
+            path_to_use = app_path
+            
+            if not path_to_use:
+                # Priority: argument2 (path) > argument (fallback path)
+                path_to_use = kwargs.get('argument2') or kwargs.get('argument')
                 
-            if not app_path:
+            if not path_to_use:
                 log_error(ValueError("No app path provided"), "Cannot launch app")
                 return False
 
-            app_path = app_path.strip()
+            path_to_use = path_to_use.strip()
 
-            if not app_path:
+            if not path_to_use:
                 log_error(ValueError("Empty app path provided"), "Cannot launch app")
                 return False
+            
+            # Note: subprocess.Popen with shell=True handles quotes reasonably well usually,
+            # but we might want to clean just outer quotes if present.
+            if path_to_use.startswith('"') and path_to_use.endswith('"'):
+                path_to_use = path_to_use[1:-1]
+            elif path_to_use.startswith("'") and path_to_use.endswith("'"):
+                path_to_use = path_to_use[1:-1]
 
-            if app_path.startswith('"') and app_path.endswith('"'):
-                app_path = app_path[1:-1]
-            elif app_path.startswith("'") and app_path.endswith("'"):
-                app_path = app_path[1:-1]
-
-            subprocess.Popen(app_path, shell=True)
+            subprocess.Popen(path_to_use, shell=True)
             return True
+
+        except Exception as e:
+            log_error(e, f"Error launching app: {app_path}")
+            return False
 
         except Exception as e:
             log_error(e, f"Error launching app: {app_path}")

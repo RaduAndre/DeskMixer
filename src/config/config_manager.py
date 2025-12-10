@@ -74,17 +74,41 @@ class ConfigManager:
         return self.config
 
     def save_config(self):
-        """Save configuration to file"""
+        """Save configuration to file using atomic write to prevent corruption"""
         try:
             # Ensure the config directory exists
             os.makedirs(self.config_dir, exist_ok=True)
 
-            # Save with proper formatting
-            with open(self.config_path, 'w') as f:
+            # Atomic Save: Write to temp file first, then rename
+            temp_path = self.config_path + ".tmp"
+            
+            with open(temp_path, 'w') as f:
                 json.dump(self.config, f, indent=4, sort_keys=True)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except OSError:
+                    # fsync can fail on some filesystems, usually safe to ignore if flush worked
+                    pass
+            
+            # Atomic replacement
+            try:
+                os.replace(temp_path, self.config_path)
+            except (PermissionError, OSError):
+                # Fallback for Windows if replace fails due to locking
+                # Try remove + rename
+                if os.path.exists(self.config_path):
+                    os.remove(self.config_path)
+                os.rename(temp_path, self.config_path)
 
             return True
         except Exception as e:
+            # Clean up temp file if it exists
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
             log_error(e, f"Error saving configuration to {self.config_path}")
             return False
 

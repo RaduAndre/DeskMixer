@@ -7,7 +7,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QLabel, QSlider
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QPainter, QColor, QPainterPath
 from ui2.icon_manager import icon_manager
 from ui2 import colors, fonts
@@ -48,10 +48,22 @@ class CustomSlider(QSlider):
         self.update()
     
     def mousePressEvent(self, event):
-        """Handle mouse press to emit clicked signal."""
+        """Handle mouse press to emit clicked signal, but prevent value change."""
         if event.button() == Qt.LeftButton:
             self.clicked.emit()
-        super().mousePressEvent(event)
+            event.accept()
+            
+    def mouseMoveEvent(self, event):
+        """Disable dragging to change value."""
+        event.accept()
+
+    def wheelEvent(self, event):
+        """Disable wheel scroll to change value."""
+        event.accept()
+
+    def keyPressEvent(self, event):
+        """Disable keyboard interaction."""
+        event.accept()
     
     def paintEvent(self, event):
         """Custom paint for scale icon, rounded track, fill, and slider head."""
@@ -112,6 +124,31 @@ class CustomSlider(QSlider):
         icon.paint(painter, icon_x, icon_y, icon_size, icon_size)
         
         painter.end()
+
+    def animate_to_value(self, target_value, callback=None):
+        """Animate slider to target value."""
+        if self.value() == target_value:
+            if callback: callback()
+            return
+            
+        # Stop existing animation
+        if hasattr(self, '_anim') and self._anim.state() == QVariantAnimation.Running:
+            self._anim.stop()
+            
+        self._anim = QVariantAnimation(self)
+        self._anim.setStartValue(self.value())
+        self._anim.setEndValue(target_value)
+        self._anim.setDuration(300) # 300ms
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.valueChanged.connect(self.setValue) 
+        
+        if callback:
+            self._anim.finished.connect(callback)
+            
+        self._anim.start()
+
+    def setValue(self, value):
+        super().setValue(int(value))
 
 
 class VolumeSlider(QWidget):
@@ -255,7 +292,7 @@ class VolumeSlider(QWidget):
         slider_layout.setAlignment(Qt.AlignCenter)  # Center slider vertically and horizontally
         
         self.slider = CustomSlider()
-        self.slider.valueChanged.connect(self.valueChanged.emit)
+        self.slider.valueChanged.connect(self._on_slider_value_changed)
         self.slider.clicked.connect(self.clicked.emit)
         slider_layout.addWidget(self.slider)
         
@@ -461,8 +498,44 @@ class VolumeSlider(QWidget):
     
     def set_value(self, value: int):
         """Set slider value."""
-        self.slider.setValue(value)
+        # Use animation if possible
+        if hasattr(self, 'slider') and hasattr(self.slider, 'animate_to_value'):
+            # Set flag to prevent echo-back of signals during animation
+            self._external_update = True
+            self.slider.animate_to_value(value, self._on_anim_finished)
+            
+            # Highlight feedback
+            self.flash_highlight()
+        else:
+            self.slider.setValue(value)
+            
+    def _on_anim_finished(self):
+        """Reset external update flag."""
+        self._external_update = False
+        
+    def _on_slider_value_changed(self, value):
+        """Handle value changes from inner slider."""
+        # Only emit if not triggered by external update
+        if not getattr(self, '_external_update', False):
+            self.valueChanged.emit(value)
     
+    def flash_highlight(self):
+        """Temporarily highlight the slider and label."""
+        self._is_highlighted = True
+        self.slider.set_hover(True) # Force hover state on slider
+        self.update_label_style(True) # Force highlight on label
+        
+        # Reset after 300ms
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(300, self._end_highlight)
+        
+    def _end_highlight(self):
+        """Reset highlight state."""
+        self._is_highlighted = False
+        # Reset based on actual mouse state
+        self.slider.set_hover(self.slider.underMouse())
+        self.update_label_style(self.underMouse())
+
     def get_value(self) -> int:
         """Get current slider value."""
         return self.slider.value()
