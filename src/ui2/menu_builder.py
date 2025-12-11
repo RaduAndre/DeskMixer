@@ -355,11 +355,15 @@ class MenuBuilder:
             if os.path.exists(version_file):
                 with open(version_file, 'r', encoding='utf-8') as f:
                     content = f.read()
-                    # Look for prodvers=(1, 1, 0, 0)
+                    # Look for prodvers=(major, minor, patch, build)
                     match = re.search(r'prodvers=\s*\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\s*\)', content)
                     if match:
-                        v1, v2, v3, v4 = match.groups()
-                        version_text = f"DeskMixer build {v1}.{v2}.{v3}.{v4}"
+                        major, minor, patch, build = match.groups()
+                        # Format as v{major}.{minor}.{patch} (omit build if 0)
+                        if build == '0':
+                            version_text = f"DeskMixer v{major}.{minor}.{patch}"
+                        else:
+                            version_text = f"DeskMixer v{major}.{minor}.{patch}.{build}"
         except Exception as e:
             print(f"Error reading version info: {e}")
 

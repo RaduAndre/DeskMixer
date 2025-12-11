@@ -20,7 +20,7 @@ VSVersionInfo(
       StringTable(
         u'040904B0',
         [StringStruct(u'CompanyName', u'DeskMixer Project'),
-        StringStruct(u'FileDescription', u'DeskMixer - Mixer for Desktops'),
+        StringStruct(u'FileDescription', u'DeskMixer'),
         StringStruct(u'FileVersion', u'2.0.0'),
         StringStruct(u'InternalName', u'DeskMixer'),
         StringStruct(u'LegalCopyright', u'Copyright (c) 2025 DeskMixer Project'),

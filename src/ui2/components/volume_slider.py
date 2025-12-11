@@ -494,7 +494,7 @@ class VolumeSlider(QWidget):
         
         # Force immediate update
         self.slider.update()
-        self.update()
+        # Parent update is redundant - child updates propagate automatically
     
     def set_value(self, value: int):
         """Set slider value."""

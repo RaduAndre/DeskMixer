@@ -26,12 +26,12 @@ class RadioCircle(QWidget):
     def set_selected(self, selected: bool):
         """Set selected state."""
         self.selected = selected
-        self.repaint()
+        self.update()
         
     def set_active_child(self, active: bool):
         """Set active child state."""
         self.active_child = active
-        self.repaint()
+        self.update()
     
     def paintEvent(self, event):
         """Paint the radio circles."""
@@ -295,7 +295,7 @@ class MenuItem(QWidget):
         if hasattr(self.circle_widget, 'set_active_child'):
             self.circle_widget.set_active_child(active)
         self.update_style()
-        self.repaint() # Force repaint of entire item logic
+        self.update() # Schedule async update instead of blocking repaint
     
     def mousePressEvent(self, event):
         """Handle mouse clicks."""

@@ -21,6 +21,10 @@ class WindowsAudioDriver(AudioDriver):
         self.device_monitor_thread = None
         self.last_set_volumes = {}
         self.VOLUME_TOLERANCE = 0.005
+        
+        # Session caching to reduce CPU usage
+        self.session_cache_timeout = 2.0  # seconds
+        self.last_session_refresh_time = 0.0
 
     def initialize(self):
         """Initialize audio devices with error handling"""
@@ -102,7 +106,7 @@ class WindowsAudioDriver(AudioDriver):
 
         while self.monitor_running:
             try:
-                time.sleep(1.0)
+                time.sleep(3.0)  # Device changes are rare, check every 3s
                 def check_device_operation():
                     devices = AudioUtilities.GetSpeakers()
                     return devices.id
@@ -289,26 +293,6 @@ class WindowsAudioDriver(AudioDriver):
                             log_error(e, "Error setting system sounds volume after refresh")
 
             return success_count > 0
-            
-            # Fallback
-            self.get_all_audio_apps()
-            target_names = ["audiosrv.dll", "system sounds", "svchost.exe"]
-            
-            # Create mapping for lower-case keys
-            lower_session_map = {k.lower(): k for k in self.app_sessions.keys()}
-            
-            found_any = False
-            for target in target_names:
-                real_key = lower_session_map.get(target)
-                if real_key:
-                    try:
-                        for session in self.app_sessions[real_key]:
-                            session.SetMasterVolume(level, None)
-                        found_any = True
-                    except Exception as e:
-                        log_error(e, f"Error setting volume for {real_key}")
-            
-            return found_any
 
         return self._safe_com_operation(
             set_system_volume_operation,
@@ -317,8 +301,12 @@ class WindowsAudioDriver(AudioDriver):
         )
 
     def set_app_volume(self, app_name, level):
+        # Try using cached sessions first
         if app_name not in self.app_sessions:
-            self.get_all_audio_apps()
+            # Only refresh if cache is stale
+            current_time = time.time()
+            if current_time - self.last_session_refresh_time >= self.session_cache_timeout:
+                self.get_all_audio_apps()
             
         # Case-insensitive lookup
         target_key = None
@@ -353,8 +341,6 @@ class WindowsAudioDriver(AudioDriver):
                 )
                 if success:
                     success_count += 1
-                else:
-                    self.get_all_audio_apps() # Refresh if failed
             
             return success_count > 0
         return False
@@ -400,7 +386,7 @@ class WindowsAudioDriver(AudioDriver):
                 try:
                     current_mute = self._safe_com_operation(get_mute_operation, f"get mute {target_key}", default_return=False)
                 except:
-                    self.get_all_audio_apps()
+                    # Session may be stale, let cache handle refresh on next call
                     if target_key not in self.app_sessions: return False
                     sessions = self.app_sessions[target_key]
                     current_mute = self._safe_com_operation(get_mute_operation, f"get mute {target_key}", default_return=False)
@@ -444,7 +430,6 @@ class WindowsAudioDriver(AudioDriver):
         """Toggle mute for system sounds"""
         def toggle_sys_mute_operation():
             success_count = 0
-            found_any = False
             
             # Refresh to be sure we have latest state
             self._refresh_system_sounds_session()
@@ -466,28 +451,6 @@ class WindowsAudioDriver(AudioDriver):
                 except: pass
              
             return False
-                
-            # Fallback (Consistency with set_system_sounds_volume)
-            self.get_all_audio_apps()
-            target_names = ["audiosrv.dll", "system sounds", "svchost.exe"]
-            lower_session_map = {k.lower(): k for k in self.app_sessions.keys()}
-            
-            found_any = False
-            for target in target_names:
-                real_key = lower_session_map.get(target)
-                if real_key:
-                    try:
-                        sessions = self.app_sessions[real_key]
-                        if len(sessions) > 0:
-                            # Use first session to determine current state
-                            current = sessions[0].GetMute()
-                            for session in sessions:
-                                session.SetMute(not current, None)
-                            found_any = True
-                    except Exception as e:
-                        log_error(e, f"Error toggling mute for {real_key}")
-            
-            return found_any
 
         return self._safe_com_operation(
             toggle_sys_mute_operation, 
@@ -496,6 +459,24 @@ class WindowsAudioDriver(AudioDriver):
         )
 
     def get_all_audio_apps(self):
+        """Get all audio apps with caching to reduce CPU usage"""
+        current_time = time.time()
+        
+        # Return cached data if recent enough
+        if (self.app_sessions and 
+            current_time - self.last_session_refresh_time < self.session_cache_timeout):
+            # Return cached volume data without re-enumerating
+            apps = {}
+            for app_name, sessions in self.app_sessions.items():
+                if len(sessions) > 0:
+                    try:
+                        volume = sessions[0].GetMasterVolume()
+                        apps[app_name] = volume
+                    except:
+                        pass  # Session became invalid, will refresh next time
+            return apps
+        
+        # Cache is stale, refresh sessions
         apps = {}
         self.app_sessions.clear()
         
@@ -521,11 +502,16 @@ class WindowsAudioDriver(AudioDriver):
                         continue
             return apps
 
-        return self._safe_com_operation(
+        result = self._safe_com_operation(
             get_sessions_operation,
             "get all audio apps",
             default_return={}
         )
+        
+        # Update cache timestamp after successful refresh
+        self.last_session_refresh_time = current_time
+        
+        return result
 
     def get_focused_app(self):
         try:

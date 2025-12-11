@@ -45,6 +45,10 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(800, 500)
         self.setWindowTitle("DeskMixer") # Critical for FindWindow
         
+        # Enable performance optimizations
+        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
+        self.setAttribute(Qt.WA_NoSystemBackground, False)
+        
         # Set window icon for taskbar
         try:
             icon_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'icons', 'logo.ico'))
@@ -1126,38 +1130,26 @@ class MainWindow(QMainWindow):
     
     def animate_menu(self, target_width: int):
         """Animate the menu sliding."""
-        # Animate menu width
+        # Animate menu width (250ms for smooth feel)
         self.menu_anim = QPropertyAnimation(self.menu_area, b"minimumWidth")
-        self.menu_anim.setDuration(300)
+        self.menu_anim.setDuration(250)  # Increased to 250ms for smoother animation
         self.menu_anim.setStartValue(self.menu_area.width())
         self.menu_anim.setEndValue(target_width)
-        self.menu_anim.setEasingCurve(QEasingCurve.InOutQuad)
+        self.menu_anim.setEasingCurve(QEasingCurve.OutCubic)  # Changed to OutCubic for snappier feel
         
         # Also animate maximum width to ensure it changes
         self.menu_anim2 = QPropertyAnimation(self.menu_area, b"maximumWidth")
-        self.menu_anim2.setDuration(300)
+        self.menu_anim2.setDuration(250)  # Increased to 250ms
         self.menu_anim2.setStartValue(self.menu_area.width())
         self.menu_anim2.setEndValue(target_width)
-        self.menu_anim2.setEasingCurve(QEasingCurve.InOutQuad)
+        self.menu_anim2.setEasingCurve(QEasingCurve.OutCubic)  # Changed to OutCubic
         
-        # Animate controllers area to shrink/expand when menu opens/closes
-        current_content_width = self.content_area.width()
-        if target_width > 0:
-            # Menu opening - leave space for menu
-            target_content_width = current_content_width - target_width
-        else:
-            # Menu closing - use full width
-            target_content_width = self.body_layout.geometry().width()
-        
-        self.content_anim = QPropertyAnimation(self.content_area, b"maximumWidth")
-        self.content_anim.setDuration(300)
-        self.content_anim.setStartValue(current_content_width)
-        self.content_anim.setEndValue(target_content_width)
-        self.content_anim.setEasingCurve(QEasingCurve.InOutQuad)
+        # Don't animate content_area - it causes slider repaints and lag
+        # Let Qt handle the layout automatically
+        # The HBoxLayout will naturally shrink content_area as menu_area grows
         
         self.menu_anim.start()
         self.menu_anim2.start()
-        self.content_anim.start()
         
         
         # Hide blocker when closing

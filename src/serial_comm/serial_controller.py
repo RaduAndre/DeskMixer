@@ -29,6 +29,10 @@ class SerialController:
         
         # State tracking
         self.last_focused_app = None
+        
+        # Threshold tracking to prevent unnecessary volume calls
+        self.last_applied_values = {}
+        self.VOLUME_CHANGE_THRESHOLD = 0.01  # 1% threshold
 
     def start(self):
         """Start processing events and listening to serial"""
@@ -62,8 +66,8 @@ class SerialController:
 
         while self.processing_events:
             try:
-                # Blocking get with timeout to allow checking processing_events flag
-                event = self.button_event_queue.get(timeout=1.0)
+                # Blocking get with short timeout for responsive shutdown
+                event = self.button_event_queue.get(timeout=0.1)
                 if event:
                     self._handle_button_action(event['button_id'], event['state'])
                     self.button_event_queue.task_done()
@@ -99,9 +103,14 @@ class SerialController:
                     # Apply smoothing
                     averaged_value = self.slider_smoother.apply_averaging(slider_id, value, slider_sampling)
 
-                    binding = bindings.get(slider_id)
-                    if binding:
-                        self._apply_volume_change(binding, averaged_value)
+                    # Only apply if changed significantly (prevents excessive COM calls)
+                    last_value = self.last_applied_values.get(slider_id, -1)
+                    if abs(averaged_value - last_value) >= self.VOLUME_CHANGE_THRESHOLD:
+                        self.last_applied_values[slider_id] = averaged_value
+                        
+                        binding = bindings.get(slider_id)
+                        if binding:
+                            self._apply_volume_change(binding, averaged_value)
 
         except Exception as e:
             log_error(e, f"Error handling serial data: {data}")
