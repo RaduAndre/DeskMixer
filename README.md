@@ -120,7 +120,7 @@ The software supports multiple volume control modes:
 | 🔔 **System Sounds** | Windows notification sounds | Silence those pings! |
 | ⭐ **Current Application** | Currently focused app | Dynamic control of active app |
 | 🎵 **Individual Apps** | Specific applications | Dedicated controls (Spotify, Discord, etc.) |
-| ❔ **Unbinded** | No assignment | Flexible unassigned slider |
+| ❔ **Unbound** | No assignment | Flexible unassigned slider |
 | ❌ **None** | Disabled | Slider inactive |
 
 **Note:** The application list updates automatically based on running audio applications. **The UI scales to accommodate any number of slider bindings you create!**
