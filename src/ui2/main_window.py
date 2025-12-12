@@ -76,6 +76,10 @@ class MainWindow(QMainWindow):
         self.setup_ui()
         self.setup_tray_icon()
         
+        # Sync initial slider positions with current volumes
+        self.sync_initial_volumes()
+        
+        
     def on_button_press_from_device(self, device_button_id: str):
         """Handle button press from device (e.g., 'b5' from device -> 'btn_4' in UI)."""
         # Device buttons are 1-indexed (b1, b2, ...), UI buttons are 0-indexed (btn_0, btn_1, ...)
@@ -552,6 +556,49 @@ class MainWindow(QMainWindow):
                 if val_lower == target_lower or arg_lower == target_lower:
                     self.update_slider_volume_by_id(slider.id, volume)
                     # Don't break, multiple sliders *could* theoretically be bound to same thing
+
+    def sync_initial_volumes(self):
+        """Query current volumes from audio system and update slider positions on startup."""
+        if not self.audio_manager:
+            return
+            
+        try:
+            # Get audio driver
+            driver = self.audio_manager.driver
+            if not driver:
+                return
+            
+            # Query volumes for each bound slider
+            for slider in self.sliders:
+                if not hasattr(slider, 'active_variables') or not slider.active_variables:
+                    continue
+                
+                # Get first binding to determine target
+                for var in slider.active_variables:
+                    value = var.get('value')
+                    if not value:
+                        continue
+                    
+                    volume = None
+                    
+                    # Query volume based on binding type
+                    if value == "Master":
+                        volume = driver.get_master_volume()
+                    elif value == "Microphone":
+                        volume = driver.get_mic_volume()
+                    elif value == "System Sounds" or value == "System sounds":
+                        volume = driver.get_system_sounds_volume()
+                    else:
+                        # Application-specific volume
+                        volume = driver.get_application_volume(value)
+                    
+                    # Update slider if volume was retrieved
+                    if volume is not None:
+                        self.update_slider_volume_by_id(slider.id, int(volume * 100))
+                        break  # Only use first binding for initial sync
+                        
+        except Exception as e:
+            print(f"Error syncing initial volumes: {e}")
 
 
     def highlight_button_by_id(self, button_id: str):

@@ -1,6 +1,6 @@
 import sys
 import traceback
-from tkinter import messagebox
+# Removed tkinter - no longer using GUI messageboxes
 from datetime import datetime
 import os
 
@@ -30,17 +30,19 @@ def global_exception_handler(exc_type, exc_value, exc_traceback):
     # We call log_error with the full_trace for uncaught exceptions
     log_error(exc_value, "Uncaught exception", error_msg)
 
-    messagebox.showerror(
-        "Critical Error",
-        f"An unexpected error occurred:\n\n{exc_value}\n\nCheck error.log for details."
-    )
+    # Print critical error to console
+    print(f"\n{'='*80}")
+    print(f"CRITICAL ERROR: {exc_value}")
+    print(f"Check error.log in Documents/DeskMixer for details.")
+    print(f"{'='*80}\n")
 
 
 def handle_error(exception, context="Error occurred"):
     """Handle and display error to user"""
     error_msg = f"{context}: {str(exception)}"
     log_error(exception, context)
-    messagebox.showerror("Error", error_msg)
+    # Print error to console
+    print(f"ERROR: {error_msg}")
 
 
 def log_error(exception, context="", full_trace=""):

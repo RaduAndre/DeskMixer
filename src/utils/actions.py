@@ -109,11 +109,9 @@ class ActionHandler:
 
     def _show_audio_cmdlets_install_dialog(self):
         """Show installation instructions for AudioDeviceCmdlets"""
-        try:
-            import tkinter as tk
-            from tkinter import messagebox
-
-            message = """AudioDeviceCmdlets PowerShell module is not installed.
+        message = """
+========================================================================
+AudioDeviceCmdlets PowerShell module is not installed.
 
 This module is required for audio output switching on Windows.
 
@@ -132,128 +130,11 @@ Installation Instructions:
 5. Restart this application
 
 Alternative: You can also install manually from:
-https://github.com/frgnca/AudioDeviceCmdlets"""
-
-            # Create a custom dialog
-            dialog = tk.Toplevel()
-            dialog.title("AudioDeviceCmdlets Required")
-            dialog.geometry("600x400")
-            dialog.configure(bg="#2d2d2d")
-            dialog.transient()
-            dialog.grab_set()
-
-            # Center the dialog
-            dialog.update_idletasks()
-            x = (dialog.winfo_screenwidth() // 2) - (600 // 2)
-            y = (dialog.winfo_screenheight() // 2) - (400 // 2)
-            dialog.geometry(f"600x400+{x}+{y}")
-
-            # Title
-            title_label = tk.Label(
-                dialog,
-                text="AudioDeviceCmdlets Not Found",
-                bg="#2d2d2d",
-                fg="#ffaa00",
-                font=("Arial", 14, "bold"),
-                pady=10
-            )
-            title_label.pack()
-
-            # Message
-            text_widget = tk.Text(
-                dialog,
-                bg="#1e1e1e",
-                fg="white",
-                font=("Consolas", 10),
-                wrap="word",
-                padx=15,
-                pady=15,
-                relief="flat"
-            )
-            text_widget.pack(fill="both", expand=True, padx=20, pady=10)
-            text_widget.insert("1.0", message)
-            text_widget.configure(state="disabled")
-
-            # Command to copy
-            command_frame = tk.Frame(dialog, bg="#2d2d2d")
-            command_frame.pack(fill="x", padx=20, pady=5)
-
-            tk.Label(
-                command_frame,
-                text="Command to copy:",
-                bg="#2d2d2d",
-                fg="#888888",
-                font=("Arial", 9)
-            ).pack(anchor="w")
-
-            command_entry = tk.Entry(
-                command_frame,
-                bg="#1e1e1e",
-                fg="white",
-                font=("Consolas", 10),
-                relief="flat"
-            )
-            command_entry.pack(fill="x", pady=5)
-            command_entry.insert(0, "Install-Module -Name AudioDeviceCmdlets -Force")
-            command_entry.configure(state="readonly")
-
-            def copy_command():
-                dialog.clipboard_clear()
-                dialog.clipboard_append("Install-Module -Name AudioDeviceCmdlets -Force")
-                copy_btn.configure(text="✓ Copied!")
-                dialog.after(2000, lambda: copy_btn.configure(text="📋 Copy Command"))
-
-            # Buttons
-            button_frame = tk.Frame(dialog, bg="#2d2d2d")
-            button_frame.pack(pady=10)
-
-            copy_btn = tk.Button(
-                button_frame,
-                text="📋 Copy Command",
-                command=copy_command,
-                bg="#404040",
-                fg="white",
-                font=("Arial", 10, "bold"),
-                relief="flat",
-                padx=15,
-                pady=8,
-                cursor="hand2"
-            )
-            copy_btn.pack(side="left", padx=5)
-
-            close_btn = tk.Button(
-                button_frame,
-                text="Close",
-                command=dialog.destroy,
-                bg="#404040",
-                fg="white",
-                font=("Arial", 10),
-                relief="flat",
-                padx=20,
-                pady=8,
-                cursor="hand2"
-            )
-            close_btn.pack(side="left", padx=5)
-
-            dialog.wait_window()
-
-        except Exception as e:
-            log_error(e, "Error showing AudioDeviceCmdlets dialog")
-            # Fallback to simple messagebox
-            try:
-                from tkinter import messagebox
-                messagebox.showwarning(
-                    "AudioDeviceCmdlets Required",
-                    "AudioDeviceCmdlets PowerShell module is not installed.\n\n"
-                    "To install:\n"
-                    "1. Open PowerShell as Administrator\n"
-                    "2. Run: Install-Module -Name AudioDeviceCmdlets -Force\n"
-                    "3. Restart this application"
-                )
-            except:
-                pass
-
-    # Mapping of Display Name -> Internal Action Type
+https://github.com/frgnca/AudioDeviceCmdlets
+========================================================================
+"""
+        print(message)
+\n    # Mapping of Display Name -> Internal Action Type\n    # Mapping of Display Name -> Internal Action Type
     ACTION_MAP = {
         "Play/Pause": "play_pause",
         "Play": "play",

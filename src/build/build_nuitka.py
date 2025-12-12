@@ -136,13 +136,13 @@ def run_nuitka_build():
     # Nuitka arguments (split into a list for subprocess)
     COMMAND = NUITKA_COMMAND_BASE + [
         # Basic compilation options
-        "--standalone",  # Changed from onefile to standalone for release
-        #"--onefile",
+        #"--standalone",  # Changed from onefile to standalone for release
+        "--onefile",
         "--msvc=latest",  # Instruct Nuitka to use the latest installed MSVC
         "--enable-plugin=pyside6",  # Changed from tk-inter to pyside6
 
         # Windows-specific options
-        "--windows-disable-console",  # No console window (GUI app)
+        #"--windows-disable-console",  # No console window (GUI app)
 
         # Output naming and location
         f"--output-filename={PRODUCT_NAME}.exe",
