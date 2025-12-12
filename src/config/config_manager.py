@@ -228,17 +228,15 @@ class ConfigManager:
             del self.config['button_bindings'][button_name]
             self.has_changes = True
 
-    def set_last_connected_port(self, port, baud):
-        """Set the last connected serial port"""
-        if (self.config.get('last_connected_port') != port or
-                self.config.get('last_connected_baud') != str(baud)):
+    def set_last_connected_port(self, port):
+        """Set the last connected serial port (baud rate is fixed at 115200)"""
+        if self.config.get('last_connected_port') != port:
             self.config['last_connected_port'] = port
-            self.config['last_connected_baud'] = str(baud)
             self.has_changes = True
 
     def set_slider_sampling(self, mode):
         """Set the global volume control mode for all bindings"""
-        valid_modes = ['soft', 'normal', 'hard']
+        valid_modes = ['instant', 'responsive', 'soft', 'normal', 'hard']
         mode = mode.lower() if mode else 'normal'
 
         if mode not in valid_modes:

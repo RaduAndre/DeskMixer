@@ -242,6 +242,10 @@ class MenuBuilder:
         
         current_sampling = settings_manager.get_slider_sampling()
         
+        instant_item = self.add_item("Instant", level=1, selected=(current_sampling == "instant"))
+        
+        responsive_item = self.add_item("Responsive", level=1, selected=(current_sampling == "responsive"))
+        
         soft_item = self.add_item("Soft", level=1, selected=(current_sampling == "soft"))
         
         normal_item = self.add_item("Normal", level=1, selected=(current_sampling == "normal"))
@@ -249,9 +253,11 @@ class MenuBuilder:
         hard_item = self.add_item("Hard", level=1, selected=(current_sampling == "hard"))
         
         # Connect callbacks
-        soft_item.clicked.connect(lambda: self._set_sampling("soft", soft_item, [normal_item, hard_item]))
-        normal_item.clicked.connect(lambda: self._set_sampling("normal", normal_item, [soft_item, hard_item]))
-        hard_item.clicked.connect(lambda: self._set_sampling("hard", hard_item, [soft_item, normal_item]))
+        instant_item.clicked.connect(lambda: self._set_sampling("instant", instant_item, [responsive_item, soft_item, normal_item, hard_item]))
+        responsive_item.clicked.connect(lambda: self._set_sampling("responsive", responsive_item, [instant_item, soft_item, normal_item, hard_item]))
+        soft_item.clicked.connect(lambda: self._set_sampling("soft", soft_item, [instant_item, responsive_item, normal_item, hard_item]))
+        normal_item.clicked.connect(lambda: self._set_sampling("normal", normal_item, [instant_item, responsive_item, soft_item, hard_item]))
+        hard_item.clicked.connect(lambda: self._set_sampling("hard", hard_item, [instant_item, responsive_item, soft_item, normal_item]))
         
         self.add_head("Layout")
         # Grid Layout Section
@@ -347,26 +353,10 @@ class MenuBuilder:
         self.content_layout.addStretch()
         
         version_text = "DeskMixer build unknown"
-        try:
-            # Path to version_info.txt relative to this file: ../build/version_info.txt
-            current_dir = os.path.dirname(__file__)
-            version_file = os.path.abspath(os.path.join(current_dir, '..', 'build', 'version_info.txt'))
-            
-            if os.path.exists(version_file):
-                with open(version_file, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    # Look for prodvers=(major, minor, patch, build)
-                    match = re.search(r'prodvers=\s*\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\s*\)', content)
-                    if match:
-                        major, minor, patch, build = match.groups()
-                        # Format as v{major}.{minor}.{patch} (omit build if 0)
-                        if build == '0':
-                            version_text = f"DeskMixer v{major}.{minor}.{patch}"
-                        else:
-                            version_text = f"DeskMixer v{major}.{minor}.{patch}.{build}"
-        except Exception as e:
-            print(f"Error reading version info: {e}")
-
+        # Use version from main.py if available
+        if hasattr(self, 'version') and self.version:
+            version_text = f"DeskMixer v{self.version}"
+        
         version_label = QLabel(version_text)
         version_label.setAlignment(Qt.AlignCenter)
         # Final Style: White color
@@ -604,23 +594,40 @@ class MenuBuilder:
         add_action_item("Play/Pause", "Play/Pause")
         add_action_item("Previous", "Previous")
         add_action_item("Next", "Next")
-        add_action_item("Volume up", "Volume up")
-        add_action_item("Volume down", "Volume down")
-        add_action_item("Seek backward", "Seek backward")
-        add_action_item("Seek forward", "Seek forward")
+        add_action_item("Volume Up", "Volume Up")
+        add_action_item("Volume Down", "Volume Down")
+        add_action_item("Seek Backward", "Seek Backward")
+        add_action_item("Seek Forward", "Seek Forward")
 
         self.add_head("Actions", expandable=True, expanded=True)
         
         # Mute with expandable sub-options
         mute_item = self.add_item("Mute", is_expandable=True)
         # Children
-        # If parent/expandable is clicked, what happens? 
-        # Usually it just expands. 
-        
         add_action_item("Master", "Mute", "Master", level=1, is_default=True)
         add_action_item("Microphone", "Mute", "Microphone", level=1)
-        add_action_item("System sounds", "Mute", "System sounds", level=1)
-        add_action_item("Focused application", "Mute", "Focused application", level=1)
+        add_action_item("System Sounds", "Mute", "System Sounds", level=1)
+        add_action_item("Current Application", "Mute", "Current Application", level=1)
+        
+        # Add dynamic active audio apps (same as slider menu "Active sounds")
+        if self.audio_manager:
+            try:
+                active_apps = self.audio_manager.get_all_audio_apps()
+                for app_name in active_apps:
+                    # Skip system/special apps already listed
+                    if app_name not in ["Master", "System Sounds", "Microphone"]:
+                        add_action_item(app_name, "Mute", app_name, level=1)
+            except Exception as e:
+                print(f"Error getting active audio apps: {e}")
+        
+        # Also add saved custom applications
+        saved_apps = settings_manager.get_app_list()
+        if saved_apps:
+            for app_name in sorted(saved_apps):
+                # Skip system/special apps and apps already added from active list
+                if app_name not in ["Master", "Microphone", "System Sounds", "Current Application"]:
+                    # Check if not already added from active apps
+                    add_action_item(app_name, "Mute", app_name, level=1)
         
         # Switch Audio Output
         switch_item = self.add_item("Switch Audio Output", is_expandable=True)

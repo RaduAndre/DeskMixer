@@ -34,9 +34,10 @@ class MainWindow(QMainWindow):
     # Signal for thread-safe button press notifications
     button_press_signal = Signal(str)
     
-    def __init__(self, audio_manager=None):
+    def __init__(self, audio_manager=None, version="Unknown"):
         super().__init__()
         self.audio_manager = audio_manager
+        self.version = version  # Store version for settings menu
         
         # Window setup
         self.setWindowFlags(Qt.FramelessWindowHint)
@@ -983,6 +984,7 @@ class MainWindow(QMainWindow):
         
         # Menu builder
         self.menu_builder = MenuBuilder(self.menu_content_layout, self.audio_manager)
+        self.menu_builder.version = self.version  # Pass version for settings menu display
         # self.menu_builder.on_alignment_changed = self.update_button_grid # Deprecated
         self.menu_builder.on_grid_changed = lambda r, c: self.update_button_grid((r, c))
         self.menu_builder.variable_validator = self.check_variable_availability

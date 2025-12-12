@@ -14,6 +14,9 @@ from core.core_controller import CoreController
 
 from utils.error_handler import setup_error_handling, log_error
 
+# Application Version - Single source of truth
+VERSION = "2.3.0"
+
 # Constants
 SINGLE_INSTANCE_MUTEX_NAME = "Global\\DeskMixer_SingleInstanceMutex"
 
@@ -76,10 +79,8 @@ def run_app():
     # Doing this after QApplication ensures Qt is ready
     from ui2.main_window import MainWindow
     
-    # We might need to pass core to MainWindow eventually, 
-    # but for now MainWindow uses global singletons or internal logic.
-    # The plan assumes direct instantiation.
-    main_window = MainWindow(audio_manager=core.audio_manager)
+    # Pass audio_manager and version to MainWindow
+    main_window = MainWindow(audio_manager=core.audio_manager, version=VERSION)
 
     # Bridge SerialHandler status updates to MainWindow
     def status_bridge(status, message):

@@ -139,7 +139,7 @@ def run_nuitka_build():
         "--onefile",
         #"--standalone",
         "--msvc=latest",  # Instruct Nuitka to use the latest installed MSVC
-        "--enable-plugin=tk-inter",
+        "--enable-plugin=pyside6",  # Changed from tk-inter to pyside6
 
         # Windows-specific options
         "--windows-disable-console",  # No console window (GUI app)
@@ -169,9 +169,16 @@ def run_nuitka_build():
         "--include-module=win32event",
         "--include-module=pywintypes",
 
-        # Additional modules your app uses
-        "--include-package=tkinter",
+        # PySide6/Qt6 packages (changed from tkinter)
+        "--include-package=PySide6",
+        "--include-package=PySide6.QtCore",
+        "--include-package=PySide6.QtGui",
+        "--include-package=PySide6.QtWidgets",
         "--include-module=PIL",
+        
+        # Audio packages
+        "--include-package=comtypes",
+        "--include-package=pycaw",
 
         # Performance optimizations
         "--lto=yes",  # Link Time Optimization for smaller/faster executable

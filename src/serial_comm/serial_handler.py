@@ -28,7 +28,7 @@ class SerialHandler:
         self.reconnect_thread = None
         self.callbacks = []
         self.port = None
-        self.baud_rate = 9600
+        self.baud_rate = 115200  # High-speed for low latency (matches Arduino)
         self.disconnect_callbacks = []
         self.reconnect_callbacks = []
         self.status_callbacks = []
@@ -58,15 +58,14 @@ class SerialHandler:
 
         self._notify_status("connecting", "Searching for device...")
 
-        # Try saved configuration first
+        # Try saved port first (baud rate is always 115200)
         if self.config_manager:
             config = self.config_manager.load_config()
             saved_port = config.get('last_connected_port')
-            saved_baud = config.get('last_connected_baud', '9600')
 
             if saved_port:
-                print(f"Trying saved port: {saved_port} at {saved_baud} baud")
-                if self._try_connect_with_handshake_and_config(saved_port, int(saved_baud)):
+                print(f"Trying saved port: {saved_port} at {self.baud_rate} baud")
+                if self._try_connect_with_handshake_and_config(saved_port, self.baud_rate):
                     return True
                 else:
                     print(f"Could not connect to saved port: {saved_port}")
@@ -130,8 +129,9 @@ class SerialHandler:
             if not self._connect_port(port, baud_rate):
                 return False
 
-            # Wait a moment for device to be ready
-            time.sleep(0.5)
+            # At high baud rates (115200), give minimal time for device startup
+            # then purge any startup messages before handshake
+            time.sleep(0.1)  # Reduced from 0.5s
 
             # Perform handshake
             if self._perform_handshake():
@@ -143,9 +143,9 @@ class SerialHandler:
                     self._notify_status("connected",
                                         f"Connected to {port} - {self.slider_count} sliders, {self.button_count} buttons")
 
-                    # Save successful connection to config
+                    # Save successful connection port to config (baud rate is fixed, not saved)
                     if self.config_manager:
-                        self.config_manager.set_last_connected_port(port, baud_rate)
+                        self.config_manager.set_last_connected_port(port)
                         self.config_manager.save_config()
 
                     # Notify configuration callbacks
@@ -170,8 +170,8 @@ class SerialHandler:
         try:
             self.handshake_received = False
 
-            # Wait for device to stabilize
-            time.sleep(0.5)
+            # At 115200 baud, device is ready quickly - reduced delay
+            time.sleep(0.1)  # Reduced from 0.5s
 
             # Send handshake request
             if not self.write(self.handshake_request + "\n"):
@@ -197,8 +197,8 @@ class SerialHandler:
             self.slider_count = 0
             self.button_count = 0
 
-            # Wait a moment for device to be ready
-            time.sleep(0.5)
+            # Quick delay for high baud rate
+            time.sleep(0.1)  # Reduced from 0.5s
 
             # Send configuration request
             if not self.write(self.config_request + "\n"):
@@ -246,8 +246,11 @@ class SerialHandler:
             dcb.StopBits = 0  # 1 stop bit
             win32file.SetCommState(self.serial_handle, dcb)
 
-            # Set timeouts (in milliseconds)
-            timeouts = (50, 0, 1000, 0, 1000)
+            # Set timeouts (in milliseconds) - Ultra-low latency configuration
+            # (ReadIntervalTimeout, ReadTotalTimeoutMultiplier, ReadTotalTimeoutConstant, 
+            #  WriteTotalTimeoutMultiplier, WriteTotalTimeoutConstant)
+            # Optimized: 1ms interval (was 50ms), 50ms total (was 1000ms), 100ms write (was 1000ms)
+            timeouts = (1, 0, 50, 0, 100)
             win32file.SetCommTimeouts(self.serial_handle, timeouts)
 
             # Purge any existing data in buffers
@@ -375,7 +378,7 @@ class SerialHandler:
                         if line:
                             self._process_data(line)
                 else:
-                    time.sleep(0.01)
+                    time.sleep(0.001)  # 1ms instead of 10ms for faster response
 
             except pywintypes.error as e:
                 error_code = e.args[0]

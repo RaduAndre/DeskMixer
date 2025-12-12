@@ -1,5 +1,4 @@
 import threading
-import queue
 import time
 from utils.error_handler import log_error
 from audio.audio_utils import SliderSmoother
@@ -21,11 +20,6 @@ class SerialController:
         self.slider_smoother = SliderSmoother()
         self.data_parser = SerialDataParser()
         self.action_handler = ActionHandler(audio_manager)
-
-        # Event Queue for Buttons
-        self.button_event_queue = queue.Queue()
-        self.event_processing_thread = None
-        self.processing_events = False
         
         # State tracking
         self.last_focused_app = None
@@ -38,43 +32,14 @@ class SerialController:
         """Start processing events and listening to serial"""
         if self.serial_handler:
             self.serial_handler.add_callback(self._handle_serial_data)
-        
-        self.processing_events = True
-        self.event_processing_thread = threading.Thread(target=self._process_button_events, daemon=True)
-        self.event_processing_thread.start()
         print("SerialController started")
 
     def stop(self):
         """Stop processing and cleanup"""
         print("Stopping SerialController...")
-        self.processing_events = False
         if self.serial_handler:
             self.serial_handler.remove_callback(self._handle_serial_data)
-        
-        # Wait for thread if needed, but it's daemon
-        pass
 
-    def _process_button_events(self):
-        """Process button events from queue"""
-        try:
-            import comtypes
-            comtypes.CoInitialize()
-        except ImportError:
-            pass
-        except Exception as e:
-            log_error(e, "Failed to initialize COM in button thread")
-
-        while self.processing_events:
-            try:
-                # Blocking get with short timeout for responsive shutdown
-                event = self.button_event_queue.get(timeout=0.1)
-                if event:
-                    self._handle_button_action(event['button_id'], event['state'])
-                    self.button_event_queue.task_done()
-            except queue.Empty:
-                continue
-            except Exception as e:
-                log_error(e, "Error processing button event")
 
     def _handle_serial_data(self, data):
         """Handle incoming serial data"""
@@ -84,13 +49,12 @@ class SerialController:
             if not parsed_event:
                 return
 
-            # Handle Buttons - Push to Queue
+            # Handle Buttons - Execute Directly (no queue)
             if parsed_event.buttons:
                 for btn_id, state in parsed_event.buttons.items():
-                    # Only queue if state is True (Pressed) - or handle both if needed
-                    # The original code only handled state '1' (Pressed)
                     if state: 
-                        self.button_event_queue.put({'button_id': btn_id, 'state': state})
+                        # Execute immediately in serial thread for lowest latency
+                        self._handle_button_action(btn_id, state)
 
             # Handle Sliders - Direct Update
             if parsed_event.sliders and self.config_manager:
@@ -103,14 +67,22 @@ class SerialController:
                     # Apply smoothing
                     averaged_value = self.slider_smoother.apply_averaging(slider_id, value, slider_sampling)
 
-                    # Only apply if changed significantly (prevents excessive COM calls)
-                    last_value = self.last_applied_values.get(slider_id, -1)
-                    if abs(averaged_value - last_value) >= self.VOLUME_CHANGE_THRESHOLD:
+                    # Skip threshold check in instant mode for zero latency
+                    if slider_sampling == 'instant':
+                        # Direct update - no threshold filtering
                         self.last_applied_values[slider_id] = averaged_value
-                        
                         binding = bindings.get(slider_id)
                         if binding:
                             self._apply_volume_change(binding, averaged_value)
+                    else:
+                        # Apply threshold to prevent excessive COM calls
+                        last_value = self.last_applied_values.get(slider_id, -1)
+                        if abs(averaged_value - last_value) >= self.VOLUME_CHANGE_THRESHOLD:
+                            self.last_applied_values[slider_id] = averaged_value
+                            
+                            binding = bindings.get(slider_id)
+                            if binding:
+                                self._apply_volume_change(binding, averaged_value)
 
         except Exception as e:
             log_error(e, f"Error handling serial data: {data}")

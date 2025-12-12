@@ -6,7 +6,14 @@ class SliderSmoother:
     
     def __init__(self):
         self.slider_history = defaultdict(lambda: deque(maxlen=5))
-        self.history_sizes = {'soft': 5, 'normal': 10, 'hard': 20}
+        # Updated with instant/responsive modes for ultra-low latency
+        self.history_sizes = {
+            'instant': 1,      # No averaging - zero latency
+            'responsive': 2,   # Minimal smoothing
+            'soft': 5, 
+            'normal': 10, 
+            'hard': 20
+        }
 
     def apply_averaging(self, slider_id, value, mode='normal'):
         """Apply averaging to slider input based on mode"""

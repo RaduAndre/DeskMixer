@@ -8,6 +8,9 @@ const int buttonInputs[NUM_BUTTONS] = {12, 13, 14, 26, 27, 25};
 // Define the interval (in milliseconds) for sending slider data
 const long SEND_INTERVAL_MS = 10;
 
+// Button debouncing interval (in milliseconds)
+const int DEBOUNCE_MS = 10;
+
 // Handshake constants
 const String HANDSHAKE_REQUEST = "DeskMixer controller request";
 const String HANDSHAKE_RESPONSE = "DeskMixer Controller Ready";
@@ -26,6 +29,9 @@ int buttonValues[NUM_BUTTONS];
 
 // Stores the state of the buttons from the previous loop iteration (for press detection)
 int previousButtonValues[NUM_BUTTONS] = {0};
+
+// Stores the last time each button changed state (for debouncing)
+unsigned long lastButtonChange[NUM_BUTTONS] = {0};
 
 // Variable to store the last time slider data was sent
 unsigned long lastSendTime = 0;
@@ -50,8 +56,8 @@ void setup() {
   // Set ADC resolution for consistent reading (0-1023 range for 10-bit)
   analogReadResolution(10);
 
-  // Initialize serial communication
-  Serial.begin(9600);
+  // Initialize serial communication at high speed for low latency
+  Serial.begin(115200);
 
   // Wait for serial port to be ready
   delay(1000);
@@ -173,20 +179,27 @@ void sendContinuousSliderValues() {
 
 
 // Checks for a press event (0 -> 1 transition) on any button and sends a separate line.
-// This implements the one-shot press logic.
+// This implements the one-shot press logic with debouncing.
 void checkAndSendButtonEvents() {
+  unsigned long now = millis();
+  
   for (int i = 0; i < NUM_BUTTONS; i++) {
     int current = buttonValues[i];
     int previous = previousButtonValues[i];
 
     // Check for a RISING EDGE (button just pressed: 0 -> 1)
     if (current == 1 && previous == 0) {
-      // Button was just pressed. Send a separate line event: Button X 1
-      String eventString = "Button ";
-      eventString += String(i + 1);
-      eventString += " 1";
-      Serial.println(eventString);
-
+      // Check debounce interval to prevent switch bounce
+      if (now - lastButtonChange[i] > DEBOUNCE_MS) {
+        // Button was just pressed (and debounced). Send event: Button X 1
+        String eventString = "Button ";
+        eventString += String(i + 1);
+        eventString += " 1";
+        Serial.println(eventString);
+        
+        // Update last change time
+        lastButtonChange[i] = now;
+      }
       // Note: We only send the '1' event (press). The system is silent on release.
     }
 
