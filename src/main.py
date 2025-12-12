@@ -15,7 +15,7 @@ from core.core_controller import CoreController
 from utils.error_handler import setup_error_handling, log_error
 
 # Application Version - Single source of truth
-VERSION = "2.3.0"
+VERSION = "2.2.0"
 
 # Constants
 SINGLE_INSTANCE_MUTEX_NAME = "Global\\DeskMixer_SingleInstanceMutex"

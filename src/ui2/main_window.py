@@ -581,16 +581,38 @@ class MainWindow(QMainWindow):
                     
                     volume = None
                     
-                    # Query volume based on binding type
+                    # Query volume based on binding type - access interfaces directly
                     if value == "Master":
-                        volume = driver.get_master_volume()
+                        if driver.master_volume:
+                            try:
+                                volume = driver.master_volume.GetMasterVolumeLevelScalar()
+                            except Exception:
+                                pass
+                                
                     elif value == "Microphone":
-                        volume = driver.get_mic_volume()
+                        if driver.mic_volume:
+                            try:
+                                volume = driver.mic_volume.GetMasterVolumeLevelScalar()
+                            except Exception:
+                                pass
+                                
                     elif value == "System Sounds" or value == "System sounds":
-                        volume = driver.get_system_sounds_volume()
+                        # System sounds has multiple sessions
+                        if hasattr(driver, 'system_sounds_sessions') and driver.system_sounds_sessions:
+                            try:
+                                volume = driver.system_sounds_sessions[0].GetSimpleAudioVolume(None).GetMasterVolume()
+                            except Exception:
+                                pass
+                                
                     else:
                         # Application-specific volume
-                        volume = driver.get_application_volume(value)
+                        if hasattr(driver, 'app_sessions') and value in driver.app_sessions:
+                            try:
+                                sessions = driver.app_sessions[value]
+                                if sessions:
+                                    volume = sessions[0].GetSimpleAudioVolume(None).GetMasterVolume()
+                            except Exception:
+                                pass
                     
                     # Update slider if volume was retrieved
                     if volume is not None:

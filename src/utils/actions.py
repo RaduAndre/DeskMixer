@@ -134,7 +134,8 @@ https://github.com/frgnca/AudioDeviceCmdlets
 ========================================================================
 """
         print(message)
-\n    # Mapping of Display Name -> Internal Action Type\n    # Mapping of Display Name -> Internal Action Type
+
+    # Mapping of Display Name -> Internal Action Type
     ACTION_MAP = {
         "Play/Pause": "play_pause",
         "Play": "play",
