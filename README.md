@@ -2,9 +2,9 @@
 
 <div align="center">
 
-A physical volume mixer with programmable buttons for Windows, inspired by [Deej](https://github.com/omriharel/deej).
+A **ultra-low latency** physical volume mixer with programmable buttons for Windows, inspired by [Deej](https://github.com/omriharel/deej).
 
-**Control your audio and automate actions with real hardware - fully scalable to your needs!**
+**Control your audio with near-instant response and automate actions with real hardware - fully scalable to your needs!**
 
 ![DeskMixer Hardware](images/hardware-image.jpg)
 
@@ -89,9 +89,11 @@ DeskMixer features a sleek, modern interface with a dark theme and smooth animat
 DeskMixer takes physical volume control and supercharges it with macro-like button actions.
 
 ### Volume Control
+- ⚡ **Ultra-Low Latency**: Optimized for near-instant response (~10-20ms) with 115200 baud serial communication
 - 🎛️ **Physical Sliders**: Control individual application volumes with real hardware sliders
 - 📊 **Scalable Design**: Add as many sliders as you need - the software adapts automatically
 - 🔊 **Flexible Targets**: Control master volume, microphone, system sounds, or individual apps
+- 🎚️ **Adjustable Sensitivity**: Choose between Instant, Responsive, Soft, Normal, or Hard sampling modes
 - 💾 **Persistent Settings**: Your configuration is saved between sessions
 
 ### Button Actions
@@ -351,7 +353,12 @@ Access via the gear icon in the top-right corner:
 **General:**
 - **Start Hidden (on tray)**: Launch minimized to system tray
 - **Start on Windows startup**: Automatically launch with Windows
-- **Slider Sampling**: Adjust hardware sensitivity (Soft/Normal/Hard)
+- **Slider Sampling**: Adjust hardware response sensitivity
+  - **Instant**: Zero-latency mode - no smoothing for immediate response
+  - **Responsive**: Minimal smoothing - very fast with slight stabilization
+  - **Soft**: Light averaging - balanced response (5 samples)
+  - **Normal**: Moderate averaging - smooth control (10 samples)
+  - **Hard**: Heavy averaging - very smooth, slower response (20 samples)
 
 **Layout:**
 - **Grid Size**: Configure button grid dimensions
