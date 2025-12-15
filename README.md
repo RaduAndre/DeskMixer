@@ -2,7 +2,7 @@
 
 <div align="center">
 
-A **ultra-low latency** physical volume mixer with programmable buttons for Windows, inspired by [Deej](https://github.com/omriharel/deej).
+A **low latency** physical volume mixer with programmable buttons for Windows, inspired by [Deej](https://github.com/omriharel/deej).
 
 **Control your audio with near-instant response and automate actions with real hardware - fully scalable to your needs!**
 
@@ -89,7 +89,7 @@ DeskMixer features a sleek, modern interface with a dark theme and smooth animat
 DeskMixer takes physical volume control and supercharges it with macro-like button actions.
 
 ### Volume Control
-- ⚡ **Ultra-Low Latency**: Optimized for near-instant response (~10-20ms) with 115200 baud serial communication
+- ⚡ **Low Latency**: Optimized for near-instant response (~10-20ms) with 115200 baud serial communication
 - 🎛️ **Physical Sliders**: Control individual application volumes with real hardware sliders
 - 📊 **Scalable Design**: Add as many sliders as you need - the software adapts automatically
 - 🔊 **Flexible Targets**: Control master volume, microphone, system sounds, or individual apps
