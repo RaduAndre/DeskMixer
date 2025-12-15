@@ -103,11 +103,10 @@ class SectionHeader(QWidget):
             start_val = self._rotation
             end_val = -90 if expanded else 0
             
-            self.anim.stop()
-            self.anim.setStartValue(start_val)
             self.anim.setEndValue(end_val)
             self.anim.start()
     
+    def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and self.expandable:
             self.toggle_expanded()
             self.clicked.emit()

@@ -138,7 +138,6 @@ class MainWindow(QMainWindow):
                 background: transparent;
                 border: none;
             }}
-            }}
         """)
 
     def update_theme_style(self):
@@ -205,7 +204,8 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, 'btn_settings'):
             # User request: "also the settings.svg color" -> implied dynamic accent
-            icon = icon_manager.get_colored_icon("settings.svg", colors.ACCENT)
+            # Correction: User reported standard launch should be default (White).
+            icon = icon_manager.get_colored_icon("settings.svg", colors.WHITE)
             self.btn_settings.setIcon(icon)
             
             # Ensure proper hover style re-application

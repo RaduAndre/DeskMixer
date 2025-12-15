@@ -15,7 +15,7 @@ from core.core_controller import CoreController
 from utils.error_handler import setup_error_handling, log_error
 
 # Application Version - Single source of truth
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 
 # Constants
 SINGLE_INSTANCE_MUTEX_NAME = "Global\\DeskMixer_SingleInstanceMutex"
@@ -73,8 +73,7 @@ def run_app():
 
     # Initialize Core Controller
     core = CoreController()
-    core.start()
-
+    
     # Import and Initialize the UI2 Main Window
     # Doing this after QApplication ensures Qt is ready
     from ui2.main_window import MainWindow
@@ -113,6 +112,9 @@ def run_app():
         # Just ensure tray is visible (MainWindow handles tray mostly in setup_tray_icon)
         # If start hidden, we just don't show the window.
         pass
+
+    # Start Core Services (after UI callbacks are registered to capture initial connection)
+    core.start()
 
     # Start the event loop
     exit_code = app.exec()
