@@ -13,13 +13,17 @@ except ImportError:
     pass
 
 def _get_app_path():
-    """Get the path to the executable, works for dev and PyInstaller"""
+    """Get the path to the executable, works for dev, PyInstaller and Nuitka"""
+    # PyInstaller and Nuitka (usually) set sys.frozen
     if getattr(sys, 'frozen', False):
         return sys.executable
-    else:
-        # Get the path of the script itself
-        # sys.argv[0] is the path to the current script
-        return f'{sys.executable} "{os.path.abspath(sys.argv[0])}"'
+    
+    # Nuitka specific check: if compiled and is an exe, use the executable path
+    if "__compiled__" in globals() and sys.argv[0].lower().endswith(".exe"):
+        return os.path.abspath(sys.argv[0])
+
+    # Development mode: return python interpreter + script path
+    return f'{sys.executable} "{os.path.abspath(sys.argv[0])}"'
 
 def set_startup(should_start):
     """Sets or removes the application from Windows startup."""

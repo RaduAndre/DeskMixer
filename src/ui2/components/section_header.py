@@ -108,9 +108,17 @@ class SectionHeader(QWidget):
             self.anim.setEndValue(end_val)
             self.anim.start()
     
-    def mousePressEvent(self, event):
-        """Handle mouse clicks."""
         if event.button() == Qt.LeftButton and self.expandable:
             self.toggle_expanded()
             self.clicked.emit()
         super().mousePressEvent(event)
+        
+    def refresh_theme(self):
+        """Refresh theme colors."""
+        self.label.setStyleSheet(f"""
+            QLabel {{
+                {fonts.menu_name_style()}
+                background: transparent;
+            }}
+        """)
+        self.update_icon_rotation()

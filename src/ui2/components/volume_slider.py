@@ -7,10 +7,12 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QLabel, QSlider
-from PySide6.QtCore import Qt, Signal, QVariantAnimation, QEasingCurve
+from PySide6.QtCore import Qt, Signal, QVariantAnimation, QEasingCurve, QRectF
 from PySide6.QtGui import QPainter, QColor, QPainterPath
+from PySide6.QtSvg import QSvgRenderer
 from ui2.icon_manager import icon_manager
 from ui2 import colors, fonts
+import re
 
 
 class CustomSlider(QSlider):
@@ -30,12 +32,49 @@ class CustomSlider(QSlider):
         self.setMouseTracking(True)  # Enable hover tracking
         
         # Load icons
-        self.normal_icon = icon_manager.get_icon("slider_head.svg")
-        self.active_icon = icon_manager.get_active_icon("slider_head.svg")
-        self.hover_icon = icon_manager.get_active_icon("slider_head.svg")  # Use active icon for hover
-        self.scale_icon = icon_manager.get_icon("scale.svg")
+        # Load icons
+        # Dynamic SVG loading for slider head
+        # We need to load the content of slider_head.svg and modify the colors for active/inactive states
+        try:
+            slider_head_path = icon_manager.get_icon_path("slider_head.svg")
+            with open(slider_head_path, 'r', encoding='utf-8') as f:
+                raw_svg = f.read()
+            
+            # Create renderers for different states
+            # Normal: Fill = WHITE, Stroke = BORDER
+            self.renderer_normal = self._create_colored_renderer(raw_svg, colors.WHITE, colors.BORDER)
+            
+            # Active/Hover: Fill = ACCENT, Stroke = ACCENT
+            self.renderer_active = self._create_colored_renderer(raw_svg, colors.ACCENT, colors.ACCENT)
+        except Exception as e:
+            print(f"Error loading slider_head.svg: {e}")
+            # Fallback to empty/default if fails (though unlikely)
+            self.renderer_normal = QSvgRenderer()
+            self.renderer_active = QSvgRenderer()
+
+        # self.scale_icon is still loaded via path in paintEvent or we can cache it
+        # The original code loaded scale_path in paintEvent locally, but had self.scale_icon definition here which was unused?
+        # Actually line 36: self.scale_icon = icon_manager.get_icon("scale.svg")
+        # But in paintEvent line 91 it uses icon_manager.get_icon_path("scale.svg") and QSvgRenderer.
+        # So self.scale_icon was likely unused or redundant in paintEvent logic.
+        # We will leave scale icon logic as is in paintEvent.
+
         self._is_active = False
         self._is_hovered = False
+
+    def _create_colored_renderer(self, svg_content, fill_color, stroke_color):
+        """Helper to create a QSvgRenderer with replaced colors."""
+        # Replace colors in .cls-1 block
+        # Pattern looks for .cls-1 { ... fill: #xxx; ... stroke: #xxx; ... }
+        # We use regex to replace the specific property values
+        
+        # Replace fill
+        content = re.sub(r'(\.cls-1\s*\{[^}]*?fill:\s*)#[a-fA-F0-9]{3,6}', f'\\1{fill_color}', svg_content, flags=re.DOTALL)
+        # Replace stroke
+        content = re.sub(r'(\.cls-1\s*\{[^}]*?stroke:\s*)#[a-fA-F0-9]{3,6}', f'\\1{stroke_color}', content, flags=re.DOTALL)
+        
+        renderer = QSvgRenderer(bytearray(content, 'utf-8'))
+        return renderer
     
     def set_active(self, active: bool):
         """Set active state."""
@@ -79,8 +118,9 @@ class CustomSlider(QSlider):
         track_x = (self.width() - track_width) // 2
         
         # Draw scale icon to the left of the track, 94% as tall as track
-        from PySide6.QtSvg import QSvgRenderer
-        from PySide6.QtCore import QRectF
+        # Draw scale icon to the left of the track, 94% as tall as track
+        # QSvgRenderer imported at top now
+
         
         scale_width = 10
         scale_height = int(track_height * 0.94)  # 94% of track height
@@ -112,16 +152,38 @@ class CustomSlider(QSlider):
         
         # Draw slider head icon (2.5x wider than track for better visibility)
         # Use active icon if active, hover icon if hovered, otherwise normal
-        if self._is_active:
-            icon = self.active_icon
-        elif self._is_hovered:
-            icon = self.hover_icon
+        # Draw slider head icon (2.5x wider than track for better visibility)
+        # Use active renderer if active or hovered
+        if self._is_active or self._is_hovered:
+            renderer = self.renderer_active
         else:
-            icon = self.normal_icon
+            renderer = self.renderer_normal
+
         icon_size = int(track_width * 2.5)  # 2.5x the track width
         icon_x = (self.width() - icon_size) // 2
         icon_y = int(slider_y - icon_size // 2)
-        icon.paint(painter, icon_x, icon_y, icon_size, icon_size)
+        
+        # Calculate aspect-ratio correct rect for the SVG
+        # viewBox is usually 0 0 62 21 (~3:1 ratio)
+        view_box = renderer.viewBox()
+        vb_w = view_box.width() 
+        vb_h = view_box.height()
+        
+        target_rect = QRectF(icon_x, icon_y, icon_size, icon_size) # Default fallback
+        
+        if vb_w > 0 and vb_h > 0:
+             # Scale to fit strictly within icon_size x icon_size while maintaining aspect ratio
+             scale = min(icon_size / vb_w, icon_size / vb_h)
+             new_w = vb_w * scale
+             new_h = vb_h * scale
+             
+             # Center in the available square box
+             new_x = icon_x + (icon_size - new_w) / 2
+             new_y = icon_y + (icon_size - new_h) / 2
+             
+             target_rect = QRectF(new_x, new_y, new_w, new_h)
+
+        renderer.render(painter, target_rect)
         
         painter.end()
 
@@ -404,7 +466,7 @@ class VolumeSlider(QWidget):
             # Dashed border style with slight background to indicate selection area
             # Ensure WA_StyledBackground is set so QWidget supports stylesheets
             self.setAttribute(Qt.WA_StyledBackground, True)
-            self.setStyleSheet(self.styleSheet() + "\nVolumeSlider { border: 2px dashed #888; border-radius: 5px; background: rgba(255, 255, 255, 0.05); }")
+            self.setStyleSheet(self.styleSheet() + f"\nVolumeSlider {{ border: 2px dashed {colors.BORDER}; border-radius: 5px; background: {colors.BORDER}; }}")
         else:
             # Reset style
              self.setStyleSheet("") 
@@ -539,3 +601,24 @@ class VolumeSlider(QWidget):
     def get_value(self) -> int:
         """Get current slider value."""
         return self.slider.value()
+
+    def refresh_theme(self):
+        """Regenerate SVG renderers and update styles for new theme."""
+        # Update renderers in the inner CustomSlider
+        if hasattr(self, 'slider') and hasattr(self.slider, '_create_colored_renderer'):
+             try:
+                slider_head_path = icon_manager.get_icon_path("slider_head.svg")
+                with open(slider_head_path, 'r', encoding='utf-8') as f:
+                    raw_svg = f.read()
+                
+                # Normal: Fill = WHITE, Stroke = BORDER
+                self.slider.renderer_normal = self.slider._create_colored_renderer(raw_svg, colors.WHITE, colors.BORDER)
+                
+                # Active/Hover: Fill = ACCENT, Stroke = ACCENT
+                self.slider.renderer_active = self.slider._create_colored_renderer(raw_svg, colors.ACCENT, colors.ACCENT)
+             except Exception as e:
+                print(f"Error refreshing slider theme: {e}")
+
+        # Update label style
+        self.update_label_style(self.underMouse())
+        self.update()

@@ -64,6 +64,16 @@ class SettingsManager:
             self.config_manager.has_changes = True
             self.save()
 
+    def get_accent_color(self) -> str:
+        """Get the saved accent color (default: teal)."""
+        return self.config_manager.get_config_value('accent_color', 'teal')
+
+    def set_accent_color(self, value: str):
+        """Set and save the accent color."""
+        self.config_manager.config['accent_color'] = value
+        self.config_manager.has_changes = True
+        self.save()
+
     def get_slider_sampling(self) -> str:
         return self.config_manager.get_slider_sampling()
         

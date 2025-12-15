@@ -40,6 +40,12 @@ class MenuBuilder:
         self.item_containers = {} # Map parent item -> sub-container
         self.parent_map = {} # Map sub-item -> parent item
         self.default_children = {} # Map parent item -> default child item
+        
+        # State
+        self.active_menu_type = None
+        self.reorder_sliders_mode = False
+        self.reorder_buttons_mode = False
+        
         self.variable_validator = None # Callback(value, argument, exclude_obj) -> conflicting_obj
         self.grid_validator = None # Callback(rows, cols) -> bool
     
@@ -192,7 +198,12 @@ class MenuBuilder:
             
         target_layout = self.content_layout
         
-        if level == 1:
+        if level == 0:
+            # Level 0 items go to section container if available
+            if self.current_section and self.current_section in self.sections:
+                target_layout = self.sections[self.current_section]['layout']
+                self.sections[self.current_section]['items'].append(item)
+        elif level == 1:
             if self.current_parent_item and self.current_parent_item in self.item_containers:
                 target_layout = self.item_containers[self.current_parent_item]['layout']
                 self.item_containers[self.current_parent_item]['items'].append(item)
@@ -209,7 +220,13 @@ class MenuBuilder:
         item = BrowseItem(initial_value=initial_value, level=level)
         
         target_layout = self.content_layout
-        if level == 1:
+        
+        if level == 0:
+            # Level 0 items go to section container if available
+            if self.current_section and self.current_section in self.sections:
+                target_layout = self.sections[self.current_section]['layout']
+                self.sections[self.current_section]['items'].append(item)
+        elif level == 1:
             if self.current_parent_item and self.current_parent_item in self.item_containers:
                 target_layout = self.item_containers[self.current_parent_item]['layout']
                 self.item_containers[self.current_parent_item]['items'].append(item)
@@ -310,6 +327,49 @@ class MenuBuilder:
         row_input.value_changed.connect(validate_and_set_grid)
         col_input.value_changed.connect(validate_and_set_grid)
         
+        if self.reorder_sliders_mode:
+             reorder_sliders.set_selected(True)
+             
+        if self.reorder_sliders_mode:
+             reorder_sliders.set_selected(True)
+             
+        # --- Accent Color Element ---
+        color_item = self.add_item("Accent Color", is_expandable=True)
+        
+        # Check current accent
+        current_accent = settings_manager.get_accent_color()
+        if not current_accent: current_accent = "teal" # fallback
+        
+        # Determine selection state
+        # If current is exactly teal (#00EAD0), "Default" is selected.
+        # Otherwise "Select new color" is selected (or we can just highlight it when active).
+        # Actually user said: "option for teal to remain which will be renamed as Default"
+        
+        TEAL_HEX = "#00EAD0"
+        is_default = (current_accent.lower() == "teal" or current_accent.upper() == TEAL_HEX)
+        
+        # 1. Default (Default arg for teal)
+        default_item = self.add_item("Default", level=1, selected=is_default)
+        default_item.color_id = "teal" 
+        
+        all_color_items = [default_item]
+        
+        # 2. Custom Color Item (Only if active and not default)
+        if not is_default:
+            # Show the hex code
+            custom_hex_item = self.add_item(current_accent.upper(), level=1, selected=True)
+            custom_hex_item.color_id = current_accent # For consistency
+            all_color_items.append(custom_hex_item)
+            # Clicking it does nothing as it's active, or re-selects (no op)
+        
+        # 3. Select new color
+        custom_item = self.add_item("Select new color...", level=1, selected=False)
+        all_color_items.append(custom_item)
+        
+        # Connect
+        default_item.clicked.connect(lambda: self._set_accent(default_item, all_color_items))
+        custom_item.clicked.connect(lambda: self._open_color_picker(custom_item, all_color_items))
+
         # Reorder Section
         reorder_item = self.add_item("Reorder Elements", is_expandable=True)
         
@@ -360,7 +420,7 @@ class MenuBuilder:
         version_label = QLabel(version_text)
         version_label.setAlignment(Qt.AlignCenter)
         # Final Style: White color
-        version_label.setStyleSheet("color: white; margin-top: 10px; margin-bottom: 0px;")
+        version_label.setStyleSheet(f"color: {colors.WHITE}; margin-top: 10px; margin-bottom: 0px;")
         self.content_layout.addWidget(version_label)
         
     def _toggle_setting_hidden(self, item):
@@ -388,6 +448,18 @@ class MenuBuilder:
              print("Failed to change startup settings")
              if hasattr(item, 'flash_error'):
                  item.flash_error()
+
+             if hasattr(item, 'flash_error'):
+                 item.flash_error()
+
+    def _toggle_theme(self, mode, selected_item, other_items):
+        """Handle theme switch."""
+        settings_manager.set_ui_theme(mode)
+        colors.set_theme(mode)
+        
+        selected_item.set_selected(True)
+        for item in other_items:
+            item.set_selected(False)
 
     # Removed _set_alignment helper as it's no longer used
 
@@ -452,49 +524,7 @@ class MenuBuilder:
         # add_toggle_item("Discord", "Discord")
         
         self.add_head("Other applications", expandable=True, expanded=True)
-        
-        # Load and display saved custom apps
-        saved_apps = settings_manager.get_app_list()
-        if saved_apps:
-            
-            def create_delete_handler(app_name):
-                 def on_right_click(pos):
-                     # Use content_layout's parent widget as parent for menu
-                     parent_widget = self.content_layout.parentWidget()
-                     menu = QMenu(parent_widget) 
-                     delete_action = QAction(f"Delete '{app_name}'", menu)
-                     delete_action.triggered.connect(lambda: delete_app(app_name))
-                     menu.addAction(delete_action)
-                     
-                     # Simple styling for the context menu to match dark theme
-                     menu.setStyleSheet(f"""
-                        QMenu {{
-                            background-color: #1E1E1E;
-                            color: #FFFFFF;
-                            border: 1px solid #333333;
-                        }}
-                        QMenu::item {{
-                            padding: 5px 20px;
-                        }}
-                        QMenu::item:selected {{
-                            background-color: #333333;
-                        }}
-                     """)
-                     
-                     menu.exec(pos)
-                 return on_right_click
 
-            def delete_app(app_name):
-                settings_manager.remove_app_from_list(app_name)
-                # Refresh menu
-                self.build_slider_menu(target_slider)
-            
-            for app_name in saved_apps:
-                # Add check if it's already added to avoid dupes if logic fails, but loop is clean
-                if not target_slider.has_variable(app_name): # Optional check?
-                    pass
-                add_toggle_item(app_name, app_name, extra_margin=20, on_right_click=create_delete_handler(app_name))
-        
         # Input for new application
         def on_new_app_text(text):
             if text and text.strip():
@@ -544,6 +574,50 @@ class MenuBuilder:
         
         input_item = self.add_input_item("Select new application", initial_value="", level=0, show_icon=True, icon_name="search.svg", icon_callback=on_browse_click)
         input_item.value_changed.connect(on_new_app_text)
+        
+        # Load and display saved custom apps
+        saved_apps = settings_manager.get_app_list()
+        if saved_apps:
+            
+            def create_delete_handler(app_name):
+                 def on_right_click(pos):
+                     # Use content_layout's parent widget as parent for menu
+                     parent_widget = self.content_layout.parentWidget()
+                     menu = QMenu(parent_widget) 
+                     delete_action = QAction(f"Delete '{app_name}'", menu)
+                     delete_action.triggered.connect(lambda: delete_app(app_name))
+                     menu.addAction(delete_action)
+                     
+                     # Simple styling for the context menu to match dark theme
+                     menu.setStyleSheet(f"""
+                        QMenu {{
+                            background-color: {colors.BACKGROUND};
+                            color: {colors.WHITE};
+                            border: 1px solid {colors.BORDER};
+                        }}
+                        QMenu::item {{
+                            padding: 5px 20px;
+                        }}
+                        QMenu::item:selected {{
+                            background-color: {colors.BACKGROUND};
+                        }}
+                     """)
+                     
+                     menu.exec(pos)
+                 return on_right_click
+
+            def delete_app(app_name):
+                settings_manager.remove_app_from_list(app_name)
+                # Refresh menu
+                self.build_slider_menu(target_slider)
+            
+            for app_name in saved_apps:
+                # Add check if it's already added to avoid dupes if logic fails, but loop is clean
+                if not target_slider.has_variable(app_name): # Optional check?
+                    pass
+                add_toggle_item(app_name, app_name, extra_margin=20, on_right_click=create_delete_handler(app_name))
+        
+
 
     def _handle_slider_toggle(self, item, slider, value, argument):
         # Check if we are trying to ENABLE the variable (it's currently not active)
@@ -1010,3 +1084,93 @@ class MenuBuilder:
             # But usually Level 0 expandable click = Default Action -> handled by activate_default_child
             pass
         # REMOVED recursive emit: clicked_item.clicked.emit()
+
+    def _open_color_picker(self, item, all_items):
+        """Open the color picker dialog."""
+        # Visual selection of "Select new color" item
+        for i in all_items:
+            i.set_selected(i == item)
+            
+        from ui2.color_picker import ColorPickerWindow
+        # Pass current accent as initial
+        current = settings_manager.get_accent_color()
+        picker = ColorPickerWindow(initial_color=current, parent=item.window()) # Parent to main window
+        picker.color_selected.connect(lambda hex_code: self._set_custom_accent(hex_code, item, all_items))
+        picker.show() # or exec() if modal, using show() assumes non-blocking or we want to keep it open? 
+        # Requirement: "window will have ok and close". Standard dialog behavior is exec().
+        picker.exec()
+
+    def _set_custom_accent(self, color_hex, item, all_items):
+        """Set a custom accent color."""
+        # Update settings
+        settings_manager.set_accent_color(color_hex)
+        
+        # Update Colors Global
+        colors.set_accent(color_hex)
+        
+        # Rebuild Settings Menu to show new item
+        self.build_settings_menu()
+        
+        # Refresh Theme (for the rest of the UI items)
+        self.refresh_theme()
+
+    def _set_accent(self, clicked_item, all_items):
+        """Set the active accent color (for Default)."""
+        if not hasattr(clicked_item, 'color_id'):
+            return
+            
+        color_id = clicked_item.color_id
+        
+        # Update settings
+        settings_manager.set_accent_color(color_id)
+        
+        # Update Colors Global
+        colors.set_accent(color_id)
+        
+        # Rebuild Settings Menu to remove custom item if going back to default
+        self.build_settings_menu()
+        
+        # Refresh Theme
+        self.refresh_theme()
+
+    def refresh_theme(self):
+        """Refresh theme for all menu items."""
+        # 1. Update all registered menu items (includes nested children)
+        for item in self.menu_items:
+            if hasattr(item, 'update_style'):
+                item.update_style()
+            elif hasattr(item, 'refresh_theme'):
+                item.refresh_theme()
+
+        # 2. Update Section Headers
+        for section in self.sections.values():
+            header = section['header']
+            if hasattr(header, 'refresh_theme'):
+                unpolished = False
+                # Try unpolish if needed to force update for headers too
+                if header.style():
+                    header.style().unpolish(header)
+                    unpolished = True
+                header.refresh_theme()
+                if unpolished:
+                     header.style().polish(header)
+                
+        # 3. Update Separators and Version Label in internal layout
+        for i in range(self.content_layout.count()):
+             item = self.content_layout.itemAt(i)
+             if item and item.widget():
+                 widget = item.widget()
+                 
+                 # Separator lines are QFrames but NOT known custom classes
+                 if isinstance(widget, QFrame) and not isinstance(widget, (MenuItem, SectionHeader, InputItem, BrowseItem)):
+                     widget.setStyleSheet(f"""
+                        QFrame {{
+                            background-color: {colors.BACKGROUND};
+                            border: none;
+                            min-height: 1px;
+                            max-height: 1px;
+                        }}
+                     """)
+                 elif isinstance(widget, QLabel):
+                     # Version Label
+                     widget.setStyleSheet(f"color: {colors.WHITE}; margin-top: 10px; margin-bottom: 0px;")

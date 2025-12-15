@@ -38,7 +38,7 @@ DeskMixer features a sleek, modern interface with a dark theme and smooth animat
 #### Interface Features
 
 **Visual Design:**
-- 🎨 **Modern Dark Theme**: Premium glassmorphic design with smooth gradients and animations
+- 🎨 **Modern Interface**: Premium glassmorphic design with **customizable accent colors** and animations
 - 🪟 **Frameless Window**: Custom title bar with drag-to-move functionality
 - 📐 **Scalable Layout**: Automatically adapts to any number of sliders and buttons
 - ✨ **Smooth Animations**: Fluid transitions and visual feedback for all interactions
@@ -362,6 +362,7 @@ Access via the gear icon in the top-right corner:
 
 **Layout:**
 - **Grid Size**: Configure button grid dimensions
+- **Accent Color**: Customize the UI with 'Default' (Teal) or any custom color via the picker
 - **Reorder Elements**: Enable drag-and-drop for buttons or sliders
 
 ### System Tray

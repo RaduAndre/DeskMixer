@@ -78,6 +78,16 @@ class MainWindow(QMainWindow):
         
         # Sync initial slider positions with current volumes
         self.sync_initial_volumes()
+
+        # Initialize Theme (Accent)
+        saved_accent = settings_manager.get_accent_color()
+        colors.set_accent(saved_accent)
+        
+        # Register for theme updates
+        colors.add_observer(self.update_theme_style)
+        
+        # Apply initial theme style (window background etc if not already set by logic uses globals)
+        self.update_theme_style()
         
         
     def on_button_press_from_device(self, device_button_id: str):
@@ -101,8 +111,8 @@ class MainWindow(QMainWindow):
         # Map SerialHandler status to UI status
         status_map = {
             "connected": ("Connected", colors.STATUS_CONNECTED), # Green
-            "connecting": ("Trying to connect", "#FFA500"),      # Orange/Yellow
-            "reconnecting": ("Trying to connect", "#FFA500"),    # Orange/Yellow
+            "connecting": ("Trying to connect", colors.STATUS_TRYING),      # Orange/Yellow
+            "reconnecting": ("Trying to connect", colors.STATUS_TRYING),    # Orange/Yellow
             "disconnected": ("Disconnected", colors.STATUS_DISCONNECTED) # Red
         }
         
@@ -128,8 +138,93 @@ class MainWindow(QMainWindow):
                 background: transparent;
                 border: none;
             }}
+            }}
         """)
-    
+
+    def update_theme_style(self):
+        """Update window and children styles based on current theme."""
+        # Update Main Window Background
+        self.central_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {colors.BACKGROUND};
+                border: 0px solid {colors.BORDER};
+                border-radius: 0px;
+            }}
+        """)
+        
+        
+        # Iterating over sliders to update their labels/backgrounds/icons
+        for slider in self.sliders:
+            if hasattr(slider, 'refresh_theme'):
+                 slider.refresh_theme()
+            else:
+                 slider.update()
+
+        # Update Buttons
+        for btn in self.buttons:
+            if hasattr(btn, 'update_style'):
+                btn.update_style()
+                btn.update_icon() 
+                
+        # Update Info Container (Header)
+        if hasattr(self, 'info_container'):
+             self.info_container.setStyleSheet(f"""
+                QWidget {{
+                    background-color: {colors.BACKGROUND};
+                    border: 0px solid {colors.BORDER};
+                    border-radius: 5px;
+                    padding: 2px 10px;
+                }}
+            """)
+            
+        # Update Title
+        if hasattr(self, 'title_label'):
+             self.title_label.setStyleSheet(f"""
+                QLabel {{
+                    color: {colors.WHITE};
+                    font-size: 20px;
+                    font-family: Montserrat, Segoe UI;
+                    font-weight: bold;
+                    background: transparent;
+                    border: none;
+                }}
+            """)
+            
+        # Update Menu
+        if hasattr(self, 'menu_builder'):
+            self.menu_builder.refresh_theme()
+
+        # Update Header Icons
+        if hasattr(self, 'btn_minimize'):
+            icon = icon_manager.get_colored_icon("minimise.svg", colors.WHITE)
+            self.btn_minimize.setIcon(icon)
+        
+        if hasattr(self, 'btn_close'):
+            icon = icon_manager.get_colored_icon("close.svg", colors.WHITE)
+            self.btn_close.setIcon(icon)
+
+        if hasattr(self, 'btn_settings'):
+            # User request: "also the settings.svg color" -> implied dynamic accent
+            icon = icon_manager.get_colored_icon("settings.svg", colors.ACCENT)
+            self.btn_settings.setIcon(icon)
+            
+            # Ensure proper hover style re-application
+            self.btn_settings.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    border: none;
+                }}
+                QPushButton:hover {{
+                    background: #1a1a1a; 
+                    border-radius: 4px;
+                    border: 1px solid {colors.ACCENT};
+                }}
+            """)
+            self.btn_settings.repaint()
+
+        # Trigger full repaint
+        self.repaint()
+        
     def setup_ui(self):
         """Setup the main UI."""
         # Central widget with background
@@ -231,8 +326,8 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(10)
         
         # App info container (title + status + settings)
-        info_container = QWidget()
-        info_container.setStyleSheet(f"""
+        self.info_container = QWidget()
+        self.info_container.setStyleSheet(f"""
             QWidget {{
                 background-color: {colors.BACKGROUND};
                 border: 0px solid {colors.BORDER};
@@ -240,7 +335,7 @@ class MainWindow(QMainWindow):
                 padding: 2px 10px;
             }}
         """)
-        info_container_layout = QHBoxLayout(info_container)
+        info_container_layout = QHBoxLayout(self.info_container)
         info_container_layout.setContentsMargins(10, 2, 10, 2)
         info_container_layout.setSpacing(0)
         
@@ -250,8 +345,8 @@ class MainWindow(QMainWindow):
         title_status_layout.setContentsMargins(0, 0, 0, 0)
         title_status_layout.setSpacing(2)
         
-        title = QLabel("DeskMixer")
-        title.setStyleSheet(f"""
+        self.title_label = QLabel("DeskMixer")
+        self.title_label.setStyleSheet(f"""
             QLabel {{
                 color: {colors.WHITE};
                 font-size: 20px;
@@ -273,7 +368,7 @@ class MainWindow(QMainWindow):
             }}
         """)
         
-        title_status_layout.addWidget(title)
+        title_status_layout.addWidget(self.title_label)
         title_status_layout.addWidget(self.status_label)
         
         info_container_layout.addWidget(title_status_widget)
@@ -284,7 +379,7 @@ class MainWindow(QMainWindow):
         self.btn_settings.clicked.connect(lambda: self.open_menu("settings"))
         info_container_layout.addWidget(self.btn_settings)
         
-        main_layout.addWidget(info_container)
+        main_layout.addWidget(self.info_container)
         
         # Sliders and buttons container (centered horizontally)
         controls_container = QWidget()

@@ -184,3 +184,27 @@ class InputItem(QWidget):
         
         # Revert after 500ms
         QTimer.singleShot(500, lambda: self.update_style())
+
+    def refresh_theme(self):
+        """Refresh theme colors."""
+        # Update Input Style
+        self.input_field.setStyleSheet(f"""
+            QLineEdit {{
+                color: {colors.WHITE};
+                font-family: Montserrat, Segoe UI;
+                font-size: 14px;
+                font-weight: 500;
+                background: transparent;
+                selection-background-color: {colors.ACCENT};
+                selection-color: {colors.BLACK};
+            }}
+        """)
+        
+        # Update Icon
+        if self.show_icon:
+            # Re-get colored icon
+            icon = icon_manager.get_colored_icon(self.icon_name, colors.WHITE)
+            self.icon_label.setPixmap(icon.pixmap(20, 20))
+            
+        # Update Container Style
+        self.update_style()

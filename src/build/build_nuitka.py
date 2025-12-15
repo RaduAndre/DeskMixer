@@ -87,8 +87,8 @@ def run_nuitka_build():
     # Parse version information from version_info.txt
     try:
         version_info = parse_version_file(VERSION_FILE)
-        VERSION = version_info.get('VERSION', '1.0.0.0')
-        PRODUCT_VERSION = version_info.get('PRODUCT_VERSION', '1.0.0')
+        VERSION = version_info.get('VERSION', '2.3.0.0')
+        PRODUCT_VERSION = version_info.get('PRODUCT_VERSION', '2.3.0')
         COMPANY_NAME = version_info.get('COMPANY_NAME', 'DeskMixer Project')
         PRODUCT_NAME = version_info.get('PRODUCT_NAME', 'DeskMixer')
         FILE_DESCRIPTION = version_info.get('FILE_DESCRIPTION', 'Hardware Audio Mixer Controller')
@@ -136,13 +136,13 @@ def run_nuitka_build():
     # Nuitka arguments (split into a list for subprocess)
     COMMAND = NUITKA_COMMAND_BASE + [
         # Basic compilation options
-        #"--standalone",  # Changed from onefile to standalone for release
-        "--onefile",
+        "--standalone",  # Changed from onefile to standalone for release
+        #"--onefile",
         "--msvc=latest",  # Instruct Nuitka to use the latest installed MSVC
         "--enable-plugin=pyside6",  # Changed from tk-inter to pyside6
 
         # Windows-specific options
-        #"--windows-disable-console",  # No console window (GUI app)
+        "--windows-disable-console",  # No console window (GUI app)
 
         # Output naming and location
         f"--output-filename={PRODUCT_NAME}.exe",

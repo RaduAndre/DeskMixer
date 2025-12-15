@@ -244,6 +244,10 @@ class MenuItem(QWidget):
                 }}
             """)
             
+        # Force re-polish to ensure style updates immediately
+        self.style().unpolish(self.container)
+        self.style().polish(self.container)
+            
     def flash_error(self):
         """Flash the border red."""
         self._error_state = True

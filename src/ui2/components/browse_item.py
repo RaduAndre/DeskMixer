@@ -220,8 +220,12 @@ class BrowseItem(QWidget):
         self.update_icon_style(hover=False) 
         
         # Update circle
+        # Update circle
         if hasattr(self, 'circle_widget'):
             self.circle_widget.set_selected(self._active)
+            
+        self.style().unpolish(self.container)
+        self.style().polish(self.container)
         
     def resizeEvent(self, event):
         # Handle dynamic elision
