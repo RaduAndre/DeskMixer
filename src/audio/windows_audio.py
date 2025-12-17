@@ -97,6 +97,10 @@ class WindowsAudioDriver(AudioDriver):
         self.device_monitor_thread = threading.Thread(target=self._monitor_device_changes, daemon=True)
         self.device_monitor_thread.start()
 
+    def set_device_change_callback(self, callback):
+        """Set callback to be called when audio device changes"""
+        self.device_change_callback = callback
+
     def _monitor_device_changes(self):
         try:
             from comtypes import CoInitialize
@@ -122,6 +126,13 @@ class WindowsAudioDriver(AudioDriver):
                     self.current_device_id = new_device_id
                     time.sleep(0.5)
                     self.refresh_audio_devices()
+                    
+                    # Notify callback if set
+                    if hasattr(self, 'device_change_callback') and self.device_change_callback:
+                        try:
+                            self.device_change_callback()
+                        except Exception as cb_err:
+                            log_error(cb_err, "Error in device change callback")
 
             except Exception as e:
                 if not hasattr(self, '_monitor_error_logged'):
@@ -216,6 +227,10 @@ class WindowsAudioDriver(AudioDriver):
         if not self.master_volume:
             return
 
+        # Clamp near-zero values to exactly 0 to prevent Windows API rounding
+        if level < 0.01:
+            level = 0.0
+
         last_level = self.last_set_volumes.get("Master", -1)
         if abs(level - last_level) < self.VOLUME_TOLERANCE:
             return
@@ -244,6 +259,10 @@ class WindowsAudioDriver(AudioDriver):
         if not self.mic_volume:
             return
 
+        # Clamp near-zero values to exactly 0 to prevent Windows API rounding
+        if level < 0.01:
+            level = 0.0
+
         last_level = self.last_set_volumes.get("Microphone", -1)
         if abs(level - last_level) < self.VOLUME_TOLERANCE:
             return
@@ -261,6 +280,10 @@ class WindowsAudioDriver(AudioDriver):
         )
 
     def set_system_sounds_volume(self, level):
+        # Clamp near-zero values to exactly 0 to prevent Windows API rounding
+        if level < 0.01:
+            level = 0.0
+
         last_level = self.last_set_volumes.get("System Sounds", -1)
         if abs(level - last_level) < self.VOLUME_TOLERANCE:
             return True
@@ -301,6 +324,10 @@ class WindowsAudioDriver(AudioDriver):
         )
 
     def set_app_volume(self, app_name, level):
+        # Clamp near-zero values to exactly 0 to prevent Windows API rounding
+        if level < 0.01:
+            level = 0.0
+
         # Try using cached sessions first
         if app_name not in self.app_sessions:
             # Only refresh if cache is stale

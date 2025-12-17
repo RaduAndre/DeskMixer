@@ -1,6 +1,7 @@
 // --- CONSTANTS ---
 const int NUM_SLIDERS = 4;
 const int NUM_BUTTONS = 6;
+const int SCREEN_ACTIVE = 1;  // 1 = screen enabled, 0 = screen disabled
 
 const int analogInputs[NUM_SLIDERS] = {33, 32, 35, 34};
 const int buttonInputs[NUM_BUTTONS] = {12, 13, 14, 26, 27, 25};
@@ -17,7 +18,7 @@ const String HANDSHAKE_RESPONSE = "DeskMixer Controller Ready";
 
 // Configuration request constants
 const String CONFIG_REQUEST = "GET_CONFIG";
-const String CONFIG_RESPONSE = "CONFIG:SLIDERS:" + String(NUM_SLIDERS) + ":BUTTONS:" + String(NUM_BUTTONS);
+const String CONFIG_RESPONSE = "CONFIG:SLIDERS:" + String(NUM_SLIDERS) + ":BUTTONS:" + String(NUM_BUTTONS) + ":SCREEN:" + String(SCREEN_ACTIVE);
 
 // --- GLOBAL VARIABLES ---
 

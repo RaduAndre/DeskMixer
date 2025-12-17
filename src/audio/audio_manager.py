@@ -46,10 +46,30 @@ class AudioManager:
             # Currently only Windows is supported, but logic can be extended
             self.driver = WindowsAudioDriver()
             self.driver.initialize()
+            
+            # Register for device changes
+            if hasattr(self.driver, 'set_device_change_callback'):
+                 self.driver.set_device_change_callback(self.on_device_change)
+                 
         except Exception as e:
             log_error(e, "Failed to initialize audio driver")
             raise RuntimeError("Audio driver initialization failed")
             
+    def on_device_change(self):
+        """Handle audio device change event"""
+        print("AudioManager: Device change detected, syncing volumes...")
+        if self.serial_controller:
+            def sync_worker():
+                try:
+                    import comtypes
+                    comtypes.CoInitialize()
+                    self.serial_controller.apply_last_volumes()
+                except Exception as e:
+                    log_error(e, "Error in volume sync worker")
+            
+            import threading
+            threading.Thread(target=sync_worker, daemon=True).start()
+
     def add_volume_callback(self, callback):
         """Add callback for volume changes. Signature: callback(target_name, volume)"""
         if callback not in self.callbacks:

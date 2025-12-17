@@ -101,6 +101,12 @@ def run_app():
         
     if core.audio_manager:
         core.audio_manager.add_button_press_callback(button_press_bridge)
+    
+    # Connect device configuration callback  
+    if core.serial_handler:
+        core.serial_handler.add_config_callback(
+            lambda slider_count, button_count: main_window.on_device_config_received(core.serial_handler)
+        )
 
     # Determine if we should start hidden based on config
     # Core uses ConfigManager, which is what we want.

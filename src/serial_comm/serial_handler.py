@@ -45,6 +45,7 @@ class SerialHandler:
         # Device configuration
         self.slider_count = 0
         self.button_count = 0
+        self.screen_active = 0
         self.config_request = "GET_CONFIG"
         self.config_received = False
         self.config_callbacks = []
@@ -139,9 +140,9 @@ class SerialHandler:
 
                 # Get device configuration
                 if self._get_device_config():
-                    print(f"✓ Device configuration: {self.slider_count} sliders, {self.button_count} buttons")
+                    print(f"✓ Device configuration: {self.slider_count} sliders, {self.button_count} buttons, screen: {self.screen_active}")
                     self._notify_status("connected",
-                                        f"Connected to {port} - {self.slider_count} sliders, {self.button_count} buttons")
+                                        f"Connected to {port} - {self.slider_count} sliders, {self.button_count} buttons, screen: {self.screen_active}")
 
                     # Save successful connection port to config (baud rate is fixed, not saved)
                     if self.config_manager:
@@ -196,6 +197,7 @@ class SerialHandler:
             self.config_received = False
             self.slider_count = 0
             self.button_count = 0
+            self.screen_active = 0
 
             # Quick delay for high baud rate
             time.sleep(0.1)  # Reduced from 0.5s
@@ -532,13 +534,17 @@ class SerialHandler:
 
             # Check for configuration response
             if clean_data.startswith('CONFIG:SLIDERS:'):
-                # Parse configuration: "CONFIG:SLIDERS:X:BUTTONS:Y"
-                match = re.match(r'CONFIG:SLIDERS:(\d+):BUTTONS:(\d+)', clean_data)
-                if match:
-                    self.slider_count = int(match.group(1))
-                    self.button_count = int(match.group(2))
+                # Parse configuration: "CONFIG:SLIDERS:X:BUTTONS:Y:SCREEN:Z"
+                try:
+                    parts = clean_data.split(':')
+                    self.slider_count = int(parts[2])
+                    self.button_count = int(parts[4])
+                    # Screen status is optional for backward compatibility
+                    self.screen_active = int(parts[6]) if len(parts) > 6 else 0
                     self.config_received = True
-                    print(f"✓ Configuration received: {self.slider_count} sliders, {self.button_count} buttons")
+                    print(f"✓ Configuration received: {self.slider_count} sliders, {self.button_count} buttons, screen: {self.screen_active}")
+                except (IndexError, ValueError) as e:
+                    log_error(e, "Error parsing device configuration")
                 return
 
             # Pass raw data to callbacks for parsing
@@ -621,10 +627,11 @@ class SerialHandler:
         return False
 
     def get_device_config(self):
-        """Get the current device configuration (slider and button counts)"""
+        """Get the current device configuration (slider, button counts, and screen status)"""
         return {
             'sliders': self.slider_count,
-            'buttons': self.button_count
+            'buttons': self.button_count,
+            'screen_active': self.screen_active
         }
 
     def request_config_update(self):

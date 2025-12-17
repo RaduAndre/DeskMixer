@@ -192,9 +192,20 @@ class CustomSlider(QSlider):
         if self.value() == target_value:
             if callback: callback()
             return
-            
-        # Stop existing animation
+        
+        # Check if we have a running animation
         if hasattr(self, '_anim') and self._anim.state() == QVariantAnimation.Running:
+            # Get the current and target values
+            current_target = self._anim.endValue()
+            
+            # Only restart animation if the change is significant (> 2 units)
+            # This prevents stuttering during rapid small updates
+            if abs(target_value - current_target) <= 2:
+                # Small change - just update the end value smoothly
+                self._anim.setEndValue(target_value)
+                return
+            
+            # Significant change - restart animation from current position
             self._anim.stop()
             
         self._anim = QVariantAnimation(self)
@@ -232,6 +243,9 @@ class VolumeSlider(QWidget):
         # Variable tracking
         # Each item is a dictionary: {'value': str, 'argument': str|None}
         self.active_variables = [] 
+        
+        # Highlight timer tracking to prevent overlapping timers
+        self._highlight_timer = None
         
         # Enable styled background to support border/background stylesheets
         self.setAttribute(Qt.WA_StyledBackground, True)
@@ -583,17 +597,26 @@ class VolumeSlider(QWidget):
     
     def flash_highlight(self):
         """Temporarily highlight the slider and label."""
+        # Cancel any existing highlight timer to prevent overlapping flashes
+        if self._highlight_timer is not None:
+            self._highlight_timer.stop()
+            self._highlight_timer = None
+        
         self._is_highlighted = True
         self.slider.set_hover(True) # Force hover state on slider
         self.update_label_style(True) # Force highlight on label
         
-        # Reset after 300ms
+        # Create and store new timer
         from PySide6.QtCore import QTimer
-        QTimer.singleShot(300, self._end_highlight)
+        self._highlight_timer = QTimer()
+        self._highlight_timer.setSingleShot(True)
+        self._highlight_timer.timeout.connect(self._end_highlight)
+        self._highlight_timer.start(800)
         
     def _end_highlight(self):
         """Reset highlight state."""
         self._is_highlighted = False
+        self._highlight_timer = None
         # Reset based on actual mouse state
         self.slider.set_hover(self.slider.underMouse())
         self.update_label_style(self.underMouse())

@@ -87,6 +87,28 @@ class SerialController:
         except Exception as e:
             log_error(e, f"Error handling serial data: {data}")
 
+    def apply_last_volumes(self):
+        """Re-apply last known volumes to current audio device (used after device change)"""
+        if not self.last_applied_values or not self.config_manager:
+            return
+            
+        print("Syncing volumes to new device...")
+        # Small delay to ensure Windows has fully switched the default device
+        time.sleep(1.0)
+        
+        try:
+            config = self.config_manager.config
+            bindings = config.get('variable_bindings', {})
+            
+            for slider_id, value in self.last_applied_values.items():
+                binding = bindings.get(slider_id)
+                if binding:
+                    # Force re-application
+                    self._apply_volume_change(binding, value)
+                    
+        except Exception as e:
+            log_error(e, "Error syncing volumes after device change")
+
     def _apply_volume_change(self, binding, value):
         """Apply volume change to targets"""
         if not self.audio_manager: return

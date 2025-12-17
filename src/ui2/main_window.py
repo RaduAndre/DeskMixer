@@ -17,6 +17,7 @@ from PySide6.QtGui import QIcon
 
 from ui2.components.volume_slider import VolumeSlider
 from ui2.components.action_button import ActionButton
+from ui2.components.screen_overlay import ScreenOverlay
 from ui2.menu_builder import MenuBuilder
 from ui2.icon_manager import icon_manager
 from ui2.layout_calculator import calculate_button_layout
@@ -105,6 +106,67 @@ class MainWindow(QMainWindow):
         except (ValueError, IndexError) as e:
             from utils.error_handler import log_error
             log_error(e, f"Error parsing device button ID: {device_button_id}")
+    
+    def on_device_config_received(self, serial_handler):
+        """Handle device configuration updates (screen visibility, etc.)."""
+        if serial_handler:
+            config = serial_handler.get_device_config()
+            screen_active = config.get('screen_active', 0)
+            
+            # Save screen state to config
+            from ui2.settings_manager import settings_manager
+            settings_manager.config_manager.set_screen_active(screen_active)
+            
+            # Update screen overlay visibility and layout presence
+            if hasattr(self, 'buttons_wrapper_layout') and hasattr(self, 'screen_overlay'):
+                if screen_active == 1:
+                    # Check if screen is already in layout
+                    screen_in_layout = False
+                    for i in range(self.buttons_wrapper_layout.count()):
+                        item = self.buttons_wrapper_layout.itemAt(i)
+                        if item and item.widget() == self.screen_overlay:
+                            screen_in_layout = True
+                            break
+                    
+                    if not screen_in_layout:
+                        # Insert screen and spacing at the beginning (before buttons)
+                        self.buttons_wrapper_layout.insertSpacing(0, 10)  # Top margin
+                        self.buttons_wrapper_layout.insertWidget(1, self.screen_overlay, 0, Qt.AlignHCenter | Qt.AlignTop)
+                        self.buttons_wrapper_layout.insertSpacing(2, 5)  # Bottom margin
+                    
+                    self.screen_overlay.setVisible(True)
+                    
+                else:
+                    # Remove only screen-related items (spacing + screen widget)
+                    # Keep the buttons_widget which is the last item
+                    items_to_remove = []
+                    for i in range(self.buttons_wrapper_layout.count()):
+                        item = self.buttons_wrapper_layout.itemAt(i)
+                        # Remove spacers and the screen widget, but not the buttons widget
+                        if item:
+                            if item.spacerItem() is not None:
+                                items_to_remove.append(i)
+                            elif item.widget() == self.screen_overlay:
+                                items_to_remove.append(i)
+                    
+                    # Remove in reverse order to maintain indices
+                    for i in reversed(items_to_remove):
+                        self.buttons_wrapper_layout.takeAt(i)
+                    
+                    # Hide the screen widget
+                    self.screen_overlay.setVisible(False)
+            
+            # Update button grid alignment based on screen visibility
+            if hasattr(self, 'buttons_wrapper') and hasattr(self, 'controls_layout'):
+                # Remove and re-add with appropriate alignment
+                self.controls_layout.removeWidget(self.buttons_wrapper)
+                
+                if screen_active == 1:
+                    # Screen visible - align to top
+                    self.controls_layout.addWidget(self.buttons_wrapper, 0, Qt.AlignTop)
+                else:
+                    # Screen hidden - align to center
+                    self.controls_layout.addWidget(self.buttons_wrapper, 0, Qt.AlignVCenter)
         
     def on_status_update(self, status: str, message: str):
         """Handle status update from background thread."""
@@ -164,7 +226,12 @@ class MainWindow(QMainWindow):
             if hasattr(btn, 'update_style'):
                 btn.update_style()
                 btn.update_icon() 
-                
+        
+        # Update Screen Overlay
+        if hasattr(self, 'screen_overlay'):
+            if hasattr(self.screen_overlay, 'refresh_theme'):
+                self.screen_overlay.refresh_theme()
+            
         # Update Info Container (Header)
         if hasattr(self, 'info_container'):
              self.info_container.setStyleSheet(f"""
@@ -450,7 +517,32 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(sliders_widget)  # No stretch factor
         
-        # Buttons container
+        # Buttons container wrapper (holds overlay + button grid)
+        buttons_wrapper = QWidget()
+        buttons_wrapper_layout = QVBoxLayout(buttons_wrapper)
+        buttons_wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        buttons_wrapper_layout.setSpacing(5)
+        buttons_wrapper_layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        
+        
+        # Screen overlay widget (positioned at top-center)
+        self.screen_overlay = ScreenOverlay()
+        # Load saved screen state from config (default hidden)
+        saved_screen_active = settings_manager.config_manager.get_screen_active(default=0)
+        self.screen_overlay.setVisible(saved_screen_active == 1)
+        self.screen_overlay.clicked.connect(self.on_screen_clicked)
+        
+        # Store reference to wrapper layout for dynamic margin changes
+        self.buttons_wrapper_layout = buttons_wrapper_layout
+        
+        # Add top margin if screen was active
+        if saved_screen_active == 1:
+            buttons_wrapper_layout.addSpacing(10)  # Top margin
+        
+        buttons_wrapper_layout.addWidget(self.screen_overlay, 0, Qt.AlignHCenter | Qt.AlignTop)
+        buttons_wrapper_layout.addSpacing(5)  # Bottom margin
+        
+        # Buttons grid container
         buttons_widget = QWidget()
         self.buttons_layout = QGridLayout(buttons_widget)
         self.buttons_layout.setSpacing(2)
@@ -536,7 +628,19 @@ class MainWindow(QMainWindow):
         # "Resize & Sort" logic. We want to preserve the matrix order we just loaded.
         self.update_button_grid()
         
-        layout.addWidget(buttons_widget)
+        # Add button grid to wrapper
+        buttons_wrapper_layout.addWidget(buttons_widget)
+        
+        # Store references for later alignment changes
+        self.buttons_wrapper = buttons_wrapper
+        self.controls_layout = layout  # The HBoxLayout containing sliders and buttons
+        
+        # Add wrapper to main controls layout with initial alignment based on saved screen state
+        saved_screen_active = settings_manager.config_manager.get_screen_active(default=0)
+        if saved_screen_active == 1:
+            layout.addWidget(buttons_wrapper, 0, Qt.AlignTop)  # Top if screen active
+        else:
+            layout.addWidget(buttons_wrapper, 0, Qt.AlignVCenter)  # Center if no screen
         
         main_layout.addWidget(controls_container)
         
@@ -1232,6 +1336,10 @@ class MainWindow(QMainWindow):
         # Just open the menu
         self.selected_button = button
         self.open_menu("button", button_num)
+        
+    def on_screen_clicked(self):
+        """Handle screen overlay click for configuration."""
+        self.open_menu("screen")
     
     def open_menu(self, menu_type: str, item_num: int = 0):
         """Open the sliding menu."""
@@ -1278,6 +1386,19 @@ class MainWindow(QMainWindow):
             if self.selected_slider:
                 self.selected_slider.set_active(False)
                 self.selected_slider = None
+        
+        elif menu_type == "screen":
+            self.menu_title.setText("Screen Settings")
+            self.menu_builder.build_screen_menu()
+            self.update_settings_icon(False)
+            
+            # Deactivate other selections
+            if self.selected_slider:
+                self.selected_slider.set_active(False)
+                self.selected_slider = None
+            if self.selected_button:
+                self.selected_button.set_active(False)
+                self.selected_button = None
         
         # Connect menu item clicks to selection handler - REMOVED
         # Menu items now have specific handlers attached by MenuBuilder during build

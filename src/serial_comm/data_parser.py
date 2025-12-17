@@ -48,14 +48,20 @@ class SerialDataParser:
                             _, slider_num, value = sub_parts
                             key = f"s{slider_num}"
                             normalized_value = float(value) / 1023.0
+                            # Zero-snap: values below 1% become 0
+                            if normalized_value < 0.01:
+                                normalized_value = 0.0
                             sliders[key] = normalized_value
                         
                         # Try parsing legacy "sX Y" format
                         elif len(sub_parts) == 2:
                             key, value = sub_parts
                             if key.startswith('s'):
-                                value = float(value) / 1023.0
-                                sliders[key] = value
+                                normalized_value = float(value) / 1023.0
+                                # Zero-snap: values below 1% become 0
+                                if normalized_value < 0.01:
+                                    normalized_value = 0.0
+                                sliders[key] = normalized_value
                     except ValueError:
                         continue
             
@@ -67,6 +73,9 @@ class SerialDataParser:
                         _, slider_num, value = parts
                         key = f"s{slider_num}"
                         normalized_value = float(value) / 1023.0
+                        # Zero-snap: values below 1% become 0
+                        if normalized_value < 0.01:
+                            normalized_value = 0.0
                         sliders[key] = normalized_value
                 except ValueError:
                     pass
@@ -100,6 +109,9 @@ class SerialDataParser:
                         key, value = parts
                         if key[1:].isdigit(): # Ensure it's s0, s1 etc
                              normalized_value = float(value) / 1023.0
+                             # Zero-snap: values below 1% become 0
+                             if normalized_value < 0.01:
+                                 normalized_value = 0.0
                              sliders[key] = normalized_value
                 except ValueError:
                     pass

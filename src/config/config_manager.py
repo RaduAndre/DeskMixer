@@ -340,3 +340,17 @@ class ConfigManager:
         except Exception as e:
             log_error(e, "Error loading variable binding")
             return None
+    
+    def set_screen_active(self, value):
+        """Set the screen_active state (0 or 1)."""
+        new_value = int(value) if value in [0, 1] else 0
+        if self.config.get('screen_active') != new_value:
+            self.config['screen_active'] = new_value
+            self.has_changes = True
+            self.save_config()
+            return True
+        return False
+    
+    def get_screen_active(self, default=0):
+        """Get the screen_active state."""
+        return self.config.get('screen_active', default)
