@@ -1,0 +1,5 @@
+../Core/Src/sliders.c:44:6:SLIDERS_Init	1
+../Core/Src/sliders.c:54:6:SLIDERS_Read	4
+../Core/Src/sliders.c:92:10:SLIDERS_GetValue	2
+../Core/Src/sliders.c:98:17:SLIDERS_GetAll	1
+../Core/Src/sliders.c:103:17:SLIDERS_GetRaw	1

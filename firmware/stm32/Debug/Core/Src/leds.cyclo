@@ -1,0 +1,11 @@
+../Core/Src/leds.c:79:13:build_lookup	5
+../Core/Src/leds.c:146:13:rebuild_leds	7
+../Core/Src/leds.c:235:6:LED_Init	2
+../Core/Src/leds.c:257:6:LED_SetColor	2
+../Core/Src/leds.c:265:6:LED_Fill	2
+../Core/Src/leds.c:274:6:LED_RedToBlue	1
+../Core/Src/leds.c:288:6:LED_SetSliderValue	5
+../Core/Src/leds.c:302:6:LED_SetButtonMask	1
+../Core/Src/leds.c:307:6:LED_Process	6
+../Core/Src/leds.c:366:6:LED_Show	3
+../Core/Src/leds.c:383:6:LED_Clear	1

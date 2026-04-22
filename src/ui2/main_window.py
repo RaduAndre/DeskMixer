@@ -34,6 +34,8 @@ class MainWindow(QMainWindow):
     volume_update_signal = Signal(str, int)
     # Signal for thread-safe button press notifications
     button_press_signal = Signal(str)
+    # Signal for thread-safe device config updates
+    config_update_signal = Signal(object)
     
     def __init__(self, audio_manager=None, version="Unknown"):
         super().__init__()
@@ -73,6 +75,7 @@ class MainWindow(QMainWindow):
         self.status_update_signal.connect(self.on_status_update)
         self.volume_update_signal.connect(self.update_slider_by_target)
         self.button_press_signal.connect(self.on_button_press_from_device)
+        self.config_update_signal.connect(self.on_device_config_received)
         
         self.setup_ui()
         self.setup_tray_icon()
@@ -112,6 +115,13 @@ class MainWindow(QMainWindow):
         if serial_handler:
             config = serial_handler.get_device_config()
             screen_active = config.get('screen_active', 0)
+            num_sliders = config.get('sliders', self.slider_count)
+            num_buttons = config.get('buttons', self.button_count)
+            
+            # Update physical counts
+            self.slider_count = num_sliders
+            self.button_count = num_buttons
+            self.update_device_layout(num_sliders, num_buttons)
             
             # Save screen state to config
             from ui2.settings_manager import settings_manager

@@ -92,6 +92,10 @@ class SerialController:
         if not self.last_applied_values or not self.config_manager:
             return
             
+        # Do not enforce volumes in the background if the hardware device is not connected
+        if not self.serial_handler or not self.serial_handler.is_connected():
+            return
+            
         print("Syncing volumes to new device...")
         # Small delay to ensure Windows has fully switched the default device
         time.sleep(1.0)

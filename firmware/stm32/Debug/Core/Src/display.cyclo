@@ -1,0 +1,8 @@
+../Core/Src/display.c:150:12:write_cmd	1
+../Core/Src/display.c:159:12:write_cmd2	1
+../Core/Src/display.c:170:5:DISPLAY_Init	3
+../Core/Src/display.c:188:6:DISPLAY_Clear	1
+../Core/Src/display.c:193:6:DISPLAY_Flush	2
+../Core/Src/display.c:215:6:DISPLAY_DrawChar	7
+../Core/Src/display.c:230:6:DISPLAY_DrawString	3
+../Core/Src/display.c:238:6:DISPLAY_ShowSplash	1

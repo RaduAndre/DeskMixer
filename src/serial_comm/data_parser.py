@@ -10,7 +10,7 @@ class ButtonEvent:
 @dataclass
 class SliderEvent:
     slider_id: str
-    value: float  # Normalized 0.0 - 1.0
+    value: float  # Normalized 0.0 - 1.0  (board sends 0-1000, divided by 1000.0)
 
 @dataclass
 class SerialDataEvent:
@@ -22,7 +22,17 @@ class SerialDataParser:
 
     @staticmethod
     def parse_data(data_str: str) -> Optional[SerialDataEvent]:
-        """Parse serial data string into slider/button dict"""
+        """
+        Parse serial data string into structured slider/button events.
+
+        Board sends slider values in range 0-1000 (= volume * 1000).
+        This parser divides by 1000.0 to produce a normalized float
+        [0.0-1.0] ready for the Windows audio API.
+
+        Examples:
+          "Slider 1 750|Slider 2 500" -> s1=0.75, s2=0.50
+          "Button 2 1"                -> b2=True
+        """
         try:
             if not data_str:
                 return None
@@ -47,7 +57,7 @@ class SerialDataParser:
                         if len(sub_parts) == 3 and sub_parts[0] == 'Slider':
                             _, slider_num, value = sub_parts
                             key = f"s{slider_num}"
-                            normalized_value = float(value) / 1023.0
+                            normalized_value = float(value) / 1000.0
                             # Zero-snap: values below 1% become 0
                             if normalized_value < 0.01:
                                 normalized_value = 0.0
@@ -57,7 +67,7 @@ class SerialDataParser:
                         elif len(sub_parts) == 2:
                             key, value = sub_parts
                             if key.startswith('s'):
-                                normalized_value = float(value) / 1023.0
+                                normalized_value = float(value) / 1000.0
                                 # Zero-snap: values below 1% become 0
                                 if normalized_value < 0.01:
                                     normalized_value = 0.0
@@ -108,7 +118,7 @@ class SerialDataParser:
                     if len(parts) == 2:
                         key, value = parts
                         if key[1:].isdigit(): # Ensure it's s0, s1 etc
-                             normalized_value = float(value) / 1023.0
+                             normalized_value = float(value) / 1000.0
                              # Zero-snap: values below 1% become 0
                              if normalized_value < 0.01:
                                  normalized_value = 0.0

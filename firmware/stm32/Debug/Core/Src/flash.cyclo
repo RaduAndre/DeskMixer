@@ -1,0 +1,9 @@
+../Core/Src/flash.c:29:13:flash_cmd	1
+../Core/Src/flash.c:39:13:send_addr	1
+../Core/Src/flash.c:51:5:FLASH_Init	4
+../Core/Src/flash.c:66:6:FLASH_ReadID	1
+../Core/Src/flash.c:75:9:FLASH_IsBusy	1
+../Core/Src/flash.c:86:6:FLASH_WaitReady	2
+../Core/Src/flash.c:93:6:FLASH_Read	1
+../Core/Src/flash.c:103:6:FLASH_PageProgram	1
+../Core/Src/flash.c:119:6:FLASH_EraseSector	1

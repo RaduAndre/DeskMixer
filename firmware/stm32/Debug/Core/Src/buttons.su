@@ -1,0 +1,4 @@
+../Core/Src/buttons.c:38:6:BUTTONS_Init	16	static
+../Core/Src/buttons.c:51:6:BUTTONS_Read	24	static
+../Core/Src/buttons.c:78:9:BUTTONS_GetState	16	static
+../Core/Src/buttons.c:84:9:BUTTONS_GetPressEvent	24	static

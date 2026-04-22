@@ -1,0 +1,5 @@
+../Core/Src/comm.c:70:6:COMM_Init	24	static
+../Core/Src/comm.c:89:6:COMM_OnRxData	24	static
+../Core/Src/comm.c:124:6:COMM_SendSliders	296	static
+../Core/Src/comm.c:146:6:COMM_SendButtonPress	48	static
+../Core/Src/comm.c:153:6:COMM_Send	32	static

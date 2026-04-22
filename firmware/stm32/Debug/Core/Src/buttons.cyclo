@@ -1,0 +1,4 @@
+../Core/Src/buttons.c:38:6:BUTTONS_Init	3
+../Core/Src/buttons.c:51:6:BUTTONS_Read	7
+../Core/Src/buttons.c:78:9:BUTTONS_GetState	2
+../Core/Src/buttons.c:84:9:BUTTONS_GetPressEvent	2

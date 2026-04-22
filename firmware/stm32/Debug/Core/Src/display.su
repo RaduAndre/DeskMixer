@@ -1,0 +1,8 @@
+../Core/Src/display.c:150:12:write_cmd	32	static
+../Core/Src/display.c:159:12:write_cmd2	32	static
+../Core/Src/display.c:170:5:DISPLAY_Init	32	static
+../Core/Src/display.c:188:6:DISPLAY_Clear	8	static
+../Core/Src/display.c:193:6:DISPLAY_Flush	152	static
+../Core/Src/display.c:215:6:DISPLAY_DrawChar	24	static
+../Core/Src/display.c:230:6:DISPLAY_DrawString	16	static
+../Core/Src/display.c:238:6:DISPLAY_ShowSplash	24	static

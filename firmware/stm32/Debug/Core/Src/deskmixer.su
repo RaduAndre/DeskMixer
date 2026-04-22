@@ -1,0 +1,2 @@
+../Core/Src/deskmixer.c:33:6:DESKMIXER_Init	8	static
+../Core/Src/deskmixer.c:60:6:DESKMIXER_Run	24	static
