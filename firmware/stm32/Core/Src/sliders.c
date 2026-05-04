@@ -3,14 +3,13 @@
  * @brief   Analog slider reader – software-sequential ADC1 scan.
  *
  * The STM32F103 ADC1 is 12-bit (0-4095). We map the raw reading to the
- * range 0-1000 using integer arithmetic:
+ * range 0-1024 using a power-of-two right-shift:
  *
- *   value = (raw_12bit * 1000) / 4095
+ *   value = raw_12bit >> 2   (equivalent to raw / 4 ≈ raw * 1024 / 4096)
  *
- * This means the board sends the volume level directly as a number that
- * represents volume * 1000 (e.g. 750 = 75.0% volume). The Python host
- * simply divides by 1000.0 to get a float [0.0-1.0] ready for the
- * Windows audio API – no magic 1023 divisor needed.
+ * This gives exactly 0-1023 for raw 0-4095, with 1024 reserved for a
+ * physically-pegged maximum.  The Python host divides by 1024.0 to get
+ * a float [0.0-1.0] ready for the Windows audio API.
  *
  * Channel mapping:
  *   Slider 1 → ADC1_IN0 (PA0, physical pin 10)
@@ -36,7 +35,7 @@ static const uint32_t s_channels[NUM_SLIDERS] = {
 };
 
 /* ── Internal value store ─────────────────────────────────────────────── */
-static uint16_t s_values[NUM_SLIDERS] = {0};  /* 0-1000 (USB/comms scale) */
+static uint16_t s_values[NUM_SLIDERS] = {0};  /* 0-1024 (USB/comms scale) */
 static uint16_t s_raw12[NUM_SLIDERS]  = {0};  /* 0-4095 (raw 12-bit ADC)  */
 
 /* ── Public functions ────────────────────────────────────────────────── */
@@ -79,8 +78,12 @@ void SLIDERS_Read(void)
             }
             
             /* Use the filtered value for the mapped result */
-            /* Map to 0-1000 (volume * 1000) using integer math, no float    */
-            s_values[i] = (uint16_t)((s_raw12[i] * 1000u) / 4095u);
+            /* Map raw 12-bit [0-4095] → [0-1024] via power-of-two shift.   */
+            /* raw >> 2 = raw / 4 → range [0-1023].  Clamp 4092-4095 to     */
+            /* 1024 so a fully-pegged slider reaches exactly max.            */
+            uint16_t mapped = (uint16_t)(s_raw12[i] >> 2u);
+            if (s_raw12[i] >= 4092u) mapped = 1024u;
+            s_values[i] = mapped;
         }
 
         HAL_ADC_Stop(&hadc1);

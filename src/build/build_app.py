@@ -156,7 +156,8 @@ if os.path.exists(exe_path):
 pyinstaller_args = [
     main_py,  # Full path to main.py
     f'--name={PRODUCT_NAME}',
-    '--onefile',
+    # '--onefile',
+    '--onedir',
     '--windowed',  # No console window
     '--clean',
     '--noupx',  # Don't use UPX compression (triggers AVs)

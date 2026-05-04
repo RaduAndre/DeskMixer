@@ -14,8 +14,13 @@
  *  Device → Host:
  *    Handshake : "DeskMixer Controller Ready\r\n"
  *    Config    : "CONFIG:SLIDERS:5:BUTTONS:6:SCREEN:1\r\n"
- *    Sliders   : "Slider 1 512|Slider 2 1023|Slider 3 0|...\r\n"   (every 10 ms)
- *    Button    : "Button X 1\r\n"                                   (on press edge)
+ *    Sliders   : "Slider 1 512|Slider 2 1024|Slider 3 0|...\r\n"  (delta-gated, max 100 Hz)
+ *    Button    : "Button X 1\r\n"                                  (on press edge, reliable)
+ *
+ * Slider values are in the range 0-1024 (raw 12-bit ADC >> 2).
+ * Python host divides by 1024.0 to obtain a float in [0.0 .. 1.0].
+ * Packets are skipped when no slider changes by more than the threshold,
+ * so idle USB bandwidth consumption is near zero.
  *
  * ── USB CDC dependency ───────────────────────────────────────────────────
  * This file requires the STM32 USB Device CDC middleware.

@@ -34,7 +34,7 @@ class SerialHandler:
         self.status_callbacks = []
         self.attempting_reconnect = False
         self.stop_reconnect = False
-        self.handshake_timeout = 3  # seconds
+        self.handshake_timeout = 4  # seconds (firmware needs ~600ms to enumerate)
         self.handshake_request = "DeskMixer controller request"
         self.handshake_response = "DeskMixer Controller Ready"
         self.handshake_received = False
@@ -130,17 +130,18 @@ class SerialHandler:
             if not self._connect_port(port, baud_rate):
                 return False
 
-            # At high baud rates (115200), give minimal time for device startup
-            # then purge any startup messages before handshake
-            time.sleep(0.1)  # Reduced from 0.5s
+            # Give the port a moment to settle then purge startup noise.
+            # The firmware now does its own 600ms enum wait before the
+            # handshake, so we only need a brief delay here.
+            time.sleep(0.05)
 
             # Perform handshake
             if self._perform_handshake():
-                print(f"✓ Connected successfully to {port}")
+                print(f"[OK] Connected successfully to {port}")
 
                 # Get device configuration
                 if self._get_device_config():
-                    print(f"✓ Device configuration: {self.slider_count} sliders, {self.button_count} buttons, screen: {self.screen_active}")
+                    print(f"[OK] Device configuration: {self.slider_count} sliders, {self.button_count} buttons, screen: {self.screen_active}")
                     self._notify_status("connected",
                                         f"Connected to {port} - {self.slider_count} sliders, {self.button_count} buttons, screen: {self.screen_active}")
 
@@ -153,11 +154,11 @@ class SerialHandler:
                     self._notify_config()
                     return True
                 else:
-                    print(f"✗ Could not get device configuration from {port}")
+                    print(f"[FAIL] Could not get device configuration from {port}")
                     self._disconnect_internal()
                     return False
             else:
-                print(f"✗ Handshake failed on {port} - not a compatible device")
+                print(f"[FAIL] Handshake failed on {port} - not a compatible device")
                 self._disconnect_internal()
                 return False
 
@@ -171,8 +172,9 @@ class SerialHandler:
         try:
             self.handshake_received = False
 
-            # At 115200 baud, device is ready quickly - reduced delay
-            time.sleep(0.1)  # Reduced from 0.5s
+            # Minimal delay – the firmware handles its own USB enumeration
+            # wait (COMM_ENUM_WAIT_MS) before sending the Ready frame.
+            time.sleep(0.05)
 
             # Send handshake request
             if not self.write(self.handshake_request + "\n"):
@@ -183,7 +185,7 @@ class SerialHandler:
             while time.time() - start_time < self.handshake_timeout:
                 if self.handshake_received:
                     return True
-                time.sleep(0.1)
+                time.sleep(0.05)  # 50ms poll – keeps CPU quiet
 
             return False
 
@@ -199,19 +201,22 @@ class SerialHandler:
             self.button_count = 0
             self.screen_active = 0
 
-            # Quick delay for high baud rate
-            time.sleep(0.1)  # Reduced from 0.5s
+            # Brief gap so the handshake ACK is fully processed by the board
+            time.sleep(0.05)
 
-            # Send configuration request
-            if not self.write(self.config_request + "\n"):
-                return False
+            # Send configuration request with retry (board may still be
+            # processing SET_PARAMS from a previous session)
+            for _attempt in range(3):
+                if not self.write(self.config_request + "\n"):
+                    return False
 
-            # Wait for response with timeout
-            start_time = time.time()
-            while time.time() - start_time < self.handshake_timeout:
-                if self.config_received:
-                    return True
-                time.sleep(0.1)
+                start_time = time.time()
+                while time.time() - start_time < 1.5:  # 1.5 s per attempt
+                    if self.config_received:
+                        return True
+                    time.sleep(0.05)
+
+                print(f"Config attempt {_attempt + 1} timed out, retrying...")
 
             return False
 
@@ -363,13 +368,22 @@ class SerialHandler:
         while self.reading and self.is_connected():
             try:
                 # Try to read data with overlapped I/O
+                # win32file.ReadFile allocates a 1024-byte buffer. Even if it succeeds immediately (hr == 0),
+                # it returns the full 1024-byte buffer which contains uninitialized memory at the end.
+                # We MUST use GetOverlappedResult to find out how many bytes were actually read.
                 hr, data = win32file.ReadFile(self.serial_handle, 1024, overlapped)
 
-                # Wait for the read to complete or timeout
+                # Wait for the read to complete or get the result immediately if already done
                 if hr == 997:  # ERROR_IO_PENDING
                     bytes_read = win32file.GetOverlappedResult(self.serial_handle, overlapped, True)
-                    if bytes_read > 0:
-                        data = data[:bytes_read]
+                else:
+                    # hr == 0 (success synchronously)
+                    bytes_read = win32file.GetOverlappedResult(self.serial_handle, overlapped, False)
+                
+                if bytes_read > 0:
+                    data = data[:bytes_read]
+                else:
+                    data = b""
 
                 if data:
                     buffer += data
@@ -471,7 +485,7 @@ class SerialHandler:
                         print(f"Background monitor: Found {len(current_ports)} port(s) - scanning...")
                         if self._scan_and_connect_all_ports():
                             # Successfully connected - monitoring will stop naturally
-                            print("✓ Connected to device - monitoring paused")
+                            print("[OK] Connected to device - monitoring paused")
                             return
                     else:
                         if ports_changed:
@@ -529,7 +543,7 @@ class SerialHandler:
             # Check for handshake response
             if self.handshake_response in clean_data:
                 self.handshake_received = True
-                print(f"✓ Handshake confirmed: {clean_data}")
+                print(f"[OK] Handshake confirmed: {clean_data}")
                 return
 
             # Check for configuration response
@@ -542,7 +556,7 @@ class SerialHandler:
                     # Screen status is optional for backward compatibility
                     self.screen_active = int(parts[6]) if len(parts) > 6 else 0
                     self.config_received = True
-                    print(f"✓ Configuration received: {self.slider_count} sliders, {self.button_count} buttons, screen: {self.screen_active}")
+                    print(f"[OK] Configuration received: {self.slider_count} sliders, {self.button_count} buttons, screen: {self.screen_active}")
                 except (IndexError, ValueError) as e:
                     log_error(e, "Error parsing device configuration")
                 return

@@ -1,2 +1,2 @@
-../Core/Src/deskmixer.c:33:6:DESKMIXER_Init	2
-../Core/Src/deskmixer.c:60:6:DESKMIXER_Run	7
+../Core/Src/deskmixer.c:50:6:DESKMIXER_Init	2
+../Core/Src/deskmixer.c:81:6:DESKMIXER_Run	7

@@ -8,8 +8,8 @@
  * The CubeMX-generated MX_ADC1_Init() only configures a single channel.
  * This driver overrides the channel selection per-read so that all 5
  * channels can be sampled sequentially without needing DMA scan mode.
- * Values are returned in the range 0-1023 (10-bit, matching the ESP32
- * analogReadResolution(10) setting used in the original firmware).
+ * Values are returned in the range 0-1024 (12-bit raw right-shifted by 2,
+ * matching the new base-1024 wire protocol).
  */
 
 #ifndef SLIDERS_H
@@ -19,7 +19,7 @@
 
 /* ---- Configuration ----------------------------------------------------- */
 #define NUM_SLIDERS     5       /**< Number of analog sliders                */
-#define SLIDER_MAX_VAL  1000    /**< Volume scale max (sent as volume × 1000)*/
+#define SLIDER_MAX_VAL  1024    /**< Volume scale max (base-1024 wire scale) */
 #define SLIDER_RAW_MAX  4095    /**< Raw 12-bit ADC maximum value             */
 
 /* ---- Public API -------------------------------------------------------- */
@@ -40,7 +40,7 @@ void SLIDERS_Read(void);
 /**
  * @brief  Get the last-read value for a specific slider (0-indexed).
  * @param  index  Slider index [0..NUM_SLIDERS-1]
- * @retval 10-bit value [0..1023], or 0 on invalid index.
+ * @retval Value in range [0..1024], or 0 on invalid index.
  */
 uint16_t SLIDERS_GetValue(uint8_t index);
 

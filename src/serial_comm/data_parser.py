@@ -10,28 +10,45 @@ class ButtonEvent:
 @dataclass
 class SliderEvent:
     slider_id: str
-    value: float  # Normalized 0.0 - 1.0  (board sends 0-1000, divided by 1000.0)
+    value: float  # Normalized 0.0 - 1.0  (board sends 0-1024, divided by 1024.0)
 
 @dataclass
 class SerialDataEvent:
     sliders: Dict[str, float]
     buttons: Dict[str, bool]
 
+# ── Wire-protocol scale constant ─────────────────────────────────────────────
+# The STM32 firmware maps its 12-bit ADC (0-4095) to 0-1024 via a right-shift
+# (raw >> 2).  We divide by this to obtain a normalized float [0.0 .. 1.0].
+# Matches SLIDER_MAX_VAL defined in sliders.h on the firmware side.
+_SLIDER_SCALE = 1024.0
+
+# Anything below 0.5% of full scale is snapped to 0.0 (physical zero-stop).
+_ZERO_SNAP_THRESHOLD = 0.005
+
 class SerialDataParser:
-    """Parser for serial data returning structured events"""
+    """Parser for serial data returning structured events.
+
+    The firmware transmits slider values in the range 0-1024 (= raw ADC >> 2).
+    This parser divides by 1024.0 to produce a normalized float [0.0 .. 1.0]
+    ready for the Windows audio API.
+
+    Examples
+    --------
+    ``"Slider 1 768|Slider 2 512"``  →  s1=0.75, s2=0.50
+    ``"Button 2 1"``                  →  b2=True
+    """
 
     @staticmethod
     def parse_data(data_str: str) -> Optional[SerialDataEvent]:
         """
-        Parse serial data string into structured slider/button events.
+        Parse a serial data string into structured slider/button events.
 
-        Board sends slider values in range 0-1000 (= volume * 1000).
-        This parser divides by 1000.0 to produce a normalized float
-        [0.0-1.0] ready for the Windows audio API.
-
-        Examples:
-          "Slider 1 750|Slider 2 500" -> s1=0.75, s2=0.50
-          "Button 2 1"                -> b2=True
+        Handles:
+          - Pipe-separated slider lines: ``"Slider 1 VAL|Slider 2 VAL|..."``
+          - Single slider:              ``"Slider X VAL"``
+          - Single button:              ``"Button X 1"``
+          - Legacy short format:        ``"sX VAL"`` / ``"bX 1"``
         """
         try:
             if not data_str:
@@ -39,69 +56,57 @@ class SerialDataParser:
 
             if isinstance(data_str, bytes):
                 data_str = data_str.decode('utf-8', errors='ignore')
-            
-            data_str = data_str.strip()
-            sliders = {}
-            buttons = {}
 
-            # Handle lines with pipe-separated values (e.g. "Slider 1 364|Slider 2 351")
+            data_str = data_str.strip()
+            sliders: Dict[str, float] = {}
+            buttons: Dict[str, bool]  = {}
+
+            # ── Pipe-separated line (primary firmware format) ─────────────
             if '|' in data_str:
                 parts = data_str.split('|')
                 for part in parts:
                     part = part.strip()
-                    if not part: continue
-                    
+                    if not part:
+                        continue
                     try:
-                        # Try parsing "Slider X Y" format
-                        sub_parts = part.split()
-                        if len(sub_parts) == 3 and sub_parts[0] == 'Slider':
-                            _, slider_num, value = sub_parts
+                        sub = part.split()
+                        if len(sub) == 3 and sub[0] == 'Slider':
+                            _, slider_num, value = sub
                             key = f"s{slider_num}"
-                            normalized_value = float(value) / 1000.0
-                            # Zero-snap: values below 1% become 0
-                            if normalized_value < 0.01:
-                                normalized_value = 0.0
-                            sliders[key] = normalized_value
-                        
-                        # Try parsing legacy "sX Y" format
-                        elif len(sub_parts) == 2:
-                            key, value = sub_parts
-                            if key.startswith('s'):
-                                normalized_value = float(value) / 1000.0
-                                # Zero-snap: values below 1% become 0
-                                if normalized_value < 0.01:
-                                    normalized_value = 0.0
-                                sliders[key] = normalized_value
+                            norm = float(value) / _SLIDER_SCALE
+                            sliders[key] = 0.0 if norm < _ZERO_SNAP_THRESHOLD else norm
+                        elif len(sub) == 2 and sub[0].startswith('s'):
+                            # Legacy short format inside a pipe-separated packet
+                            key, value = sub
+                            if key[1:].isdigit():
+                                norm = float(value) / _SLIDER_SCALE
+                                sliders[key] = 0.0 if norm < _ZERO_SNAP_THRESHOLD else norm
                     except ValueError:
                         continue
-            
-            # Handle raw "Slider X Y" format (e.g. "Slider 0 1023")
+
+            # ── Single "Slider X VAL" line ─────────────────────────────────
             elif data_str.startswith('Slider '):
                 try:
                     parts = data_str.split()
                     if len(parts) == 3:
                         _, slider_num, value = parts
                         key = f"s{slider_num}"
-                        normalized_value = float(value) / 1023.0
-                        # Zero-snap: values below 1% become 0
-                        if normalized_value < 0.01:
-                            normalized_value = 0.0
-                        sliders[key] = normalized_value
+                        norm = float(value) / _SLIDER_SCALE
+                        sliders[key] = 0.0 if norm < _ZERO_SNAP_THRESHOLD else norm
                 except ValueError:
                     pass
 
-            # Handle raw "Button X Y" format (e.g. "Button 1 1")
+            # ── "Button X Y" line ──────────────────────────────────────────
             elif data_str.startswith('Button '):
                 try:
                     parts = data_str.split()
                     if len(parts) == 3:
                         _, button_num, state = parts
-                        key = f"b{button_num}"
-                        buttons[key] = (state == '1')
+                        buttons[f"b{button_num}"] = (state == '1')
                 except ValueError:
                     pass
 
-            # Handle legacy/simple format "bX Y" (e.g. "b1 1")
+            # ── Legacy short formats ───────────────────────────────────────
             elif data_str.startswith('b'):
                 try:
                     parts = data_str.split()
@@ -110,19 +115,15 @@ class SerialDataParser:
                         buttons[key] = (value == '1')
                 except ValueError:
                     pass
-            
-            # Handle legacy/simple format "sX Y" (e.g. "s0 1023")
+
             elif data_str.startswith('s'):
                 try:
                     parts = data_str.split()
                     if len(parts) == 2:
                         key, value = parts
-                        if key[1:].isdigit(): # Ensure it's s0, s1 etc
-                             normalized_value = float(value) / 1000.0
-                             # Zero-snap: values below 1% become 0
-                             if normalized_value < 0.01:
-                                 normalized_value = 0.0
-                             sliders[key] = normalized_value
+                        if key[1:].isdigit():
+                            norm = float(value) / _SLIDER_SCALE
+                            sliders[key] = 0.0 if norm < _ZERO_SNAP_THRESHOLD else norm
                 except ValueError:
                     pass
 
