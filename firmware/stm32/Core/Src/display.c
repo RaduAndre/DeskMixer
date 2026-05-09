@@ -235,6 +235,44 @@ void DISPLAY_DrawString(uint8_t col, uint8_t page, const char *str)
     }
 }
 
+void DISPLAY_DrawChar2x(uint8_t col, uint8_t page, char c)
+{
+    if (c < 0x20 || c > 0x7E) c = '?';
+    if (page >= DISPLAY_PAGES - 1) return;
+
+    const uint8_t *glyph = FONT_6x8[(uint8_t)(c - 0x20)];
+    for (uint8_t x = 0; x < 5; x++) {
+        uint8_t col_data = glyph[x];
+        
+        uint16_t stretched = 0;
+        for (uint8_t b = 0; b < 8; b++) {
+            if (col_data & (1 << b)) {
+                stretched |= (3 << (b * 2));
+            }
+        }
+        
+        if (col + x*2 < DISPLAY_WIDTH) {
+            s_fb[page][col + x*2] = (uint8_t)(stretched & 0xFF);
+            s_fb[page+1][col + x*2] = (uint8_t)(stretched >> 8);
+        }
+        if (col + x*2 + 1 < DISPLAY_WIDTH) {
+            s_fb[page][col + x*2 + 1] = (uint8_t)(stretched & 0xFF);
+            s_fb[page+1][col + x*2 + 1] = (uint8_t)(stretched >> 8);
+        }
+    }
+    /* spacing */
+    if (col + 10 < DISPLAY_WIDTH) { s_fb[page][col+10] = 0; s_fb[page+1][col+10] = 0; }
+    if (col + 11 < DISPLAY_WIDTH) { s_fb[page][col+11] = 0; s_fb[page+1][col+11] = 0; }
+}
+
+void DISPLAY_DrawString2x(uint8_t col, uint8_t page, const char *str)
+{
+    while (*str && col < DISPLAY_WIDTH) {
+        DISPLAY_DrawChar2x(col, page, *str++);
+        col += 12;
+    }
+}
+
 void DISPLAY_ShowSplash(void)
 {
     DISPLAY_Clear();
@@ -268,7 +306,8 @@ typedef enum {
 static DisplayState_t s_disp_state = DISP_STATE_DISCONNECTED;
 static uint32_t s_connected_msg_time = 0;
 static uint32_t s_override_time = 0;
-static char s_override_text[32] = {0};
+static char s_override_name[32] = {0};
+static char s_override_value[16] = {0};
 static uint8_t s_force_redraw = 1;
 
 void DISPLAY_SetConnectionState(uint8_t connected) {
@@ -286,8 +325,12 @@ void DISPLAY_SetConnectionState(uint8_t connected) {
     }
 }
 
-void DISPLAY_ShowOverride(const char* text) {
-    strncpy(s_override_text, text, sizeof(s_override_text)-1);
+void DISPLAY_ShowOverride(const char* name, const char* value) {
+    if (name) strncpy(s_override_name, name, sizeof(s_override_name)-1);
+    else s_override_name[0] = '\0';
+    if (value) strncpy(s_override_value, value, sizeof(s_override_value)-1);
+    else s_override_value[0] = '\0';
+    
     s_override_time = HAL_GetTick();
     if (s_disp_state != DISP_STATE_OVERRIDE) {
         s_disp_state = DISP_STATE_OVERRIDE;
@@ -324,10 +367,26 @@ void DISPLAY_Process(void) {
             DISPLAY_ShowSplash();
         } else if (s_disp_state == DISP_STATE_OVERRIDE) {
             DISPLAY_Clear();
-            int len = strlen(s_override_text);
-            int x = 64 - (len * 3);
-            if (x < 0) x = 0;
-            DISPLAY_DrawString(x, 3, s_override_text);
+            
+            int val_len = strlen(s_override_value);
+            if (val_len > 0) {
+                int val_px_width = val_len * 12; 
+                int val_x = (DISPLAY_WIDTH - val_px_width) / 2;
+                if (val_x < 0) val_x = 0;
+                DISPLAY_DrawString2x((uint8_t)val_x, 2, s_override_value);
+            }
+            
+            int name_len = strlen(s_override_name);
+            if (name_len > 0) {
+                int name_px_width = name_len * 6;
+                int name_x = (DISPLAY_WIDTH - name_px_width) / 2;
+                if (name_x < 0) name_x = 0;
+                // If there's a value, draw name below it (page 5)
+                // If no value, center the name vertically (page 3)
+                uint8_t name_page = (val_len > 0) ? 5 : 3;
+                DISPLAY_DrawString((uint8_t)name_x, name_page, s_override_name);
+            }
+            
             DISPLAY_Flush();
         }
     }

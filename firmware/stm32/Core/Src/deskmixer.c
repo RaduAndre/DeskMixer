@@ -50,7 +50,7 @@ static uint32_t s_lastSendTime = 0;
 
 void DESKMIXER_Init(void)
 {
-    /* 1. Flash (non-fatal if absent) */
+    /* 1. Flash + params (non-fatal if SPI flash absent – defaults used) */
     FLASH_Init();
     PARAMS_Init();
 
@@ -60,9 +60,11 @@ void DESKMIXER_Init(void)
         DISPLAY_ShowSplash();
     }
 
-    /* 3. SK6812MINI LEDs – start animation from blank */
+    /* 3. SK6812MINI LEDs – initialise driver, then restore persisted config.
+     *    LED_Init() must come before PARAMS_ApplyToLeds() so the driver
+     *    state variables are zeroed before we write to them. */
     LED_Init();
-    LED_RedToBlue();   /* no-op, clears strip and starts surf anim */
+    PARAMS_ApplyToLeds();   /* restore brightness/speed/fill/colours from flash */
 
     /* 4. Slider ADC (runs calibration) */
     SLIDERS_Init();

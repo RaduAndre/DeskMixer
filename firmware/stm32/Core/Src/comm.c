@@ -63,7 +63,8 @@
 #include "buttons.h"   /* NUM_BUTTONS */
 #include "main.h"      /* HAL_GetTick */
 #include "display.h"   /* DISPLAY_Clear, DISPLAY_DrawString, DISPLAY_Flush, DISPLAY_ShowSplash */
-#include "params.h"    /* PARAMS_SendList, PARAMS_Update */
+#include "params.h"    /* PARAMS_SendList, PARAMS_Update, PARAMS_Set*, PARAMS_ApplyToLeds */
+#include "leds.h"      /* LED_Set* – called indirectly via PARAMS_ApplyToLeds */
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -224,28 +225,95 @@ void COMM_OnRxData(const uint8_t *buf, uint32_t len)
                                (uint16_t)(sizeof(HANDSHAKE_RESPONSE) - 1));
                 s_send_params_pending = 1;
             } else if (strncmp(s_rxBuf, "Parameter_update: ", 18) == 0) {
+                /*
+                 * Format (PC side sends):  Parameter_update: "Slider 1", "Master"
+                 * Parse: extract first quoted string (param name) and
+                 *        second quoted string (new value).
+                 */
                 char *ptr = s_rxBuf + 18;
+                /* Skip leading whitespace */
+                while (*ptr == ' ') ptr++;
                 if (*ptr == '"') {
                     ptr++;
                     char *name_end = strchr(ptr, '"');
                     if (name_end) {
                         *name_end = '\0';
-                        char *name = ptr;
+                        const char *name = ptr;
                         ptr = name_end + 1;
-                        char *val_start = strchr(ptr, '"');
-                        if (val_start) {
-                            val_start++;
-                            char *val_end = strchr(val_start, '"');
+                        /* Skip optional comma and whitespace */
+                        while (*ptr == ',' || *ptr == ' ') ptr++;
+                        if (*ptr == '"') {
+                            ptr++;
+                            char *val_end = strchr(ptr, '"');
                             if (val_end) {
                                 *val_end = '\0';
-                                PARAMS_Update(name, val_start);
+                                PARAMS_Update(name, ptr);
                             }
                         }
                     }
                 }
                 _send_reliable("ACK\r\n", 5);
             } else if (strncmp(s_rxBuf, "SET_PARAMS:", 11) == 0) {
-                /* Handled elsewhere or just ACK to avoid timeout */
+                /*
+                 * Parse LED configuration parameters.
+                 * Format: SET_PARAMS:BR:80|SF:1|SS:0|BF:1|BS:0|AS:5|SC1:R,G,B|BC2:R,G,B|...
+                 *
+                 * Tokens are pipe-separated.  Each token is KEY:VALUE.
+                 * Scalar LED fields (BR/SF/SS/BF/BS/AS) are stored via PARAMS_Set*.
+                 * Colour fields (SCN/BCN) are per-index R,G,B triples.
+                 * After all tokens, PARAMS_ApplyToLeds() pushes everything live.
+                 */
+                char *payload = s_rxBuf + 11;
+                char *tok = payload;
+                uint8_t leds_changed = 0;
+
+                while (tok && *tok) {
+                    char *sep = strchr(tok, '|');
+                    if (sep) *sep = '\0';
+
+                    char *colon = strchr(tok, ':');
+                    if (colon) {
+                        *colon = '\0';
+                        const char *key = tok;
+                        const char *val = colon + 1;
+                        int iv = 0;
+                        /* Fast atoi (no stdlib dependency needed) */
+                        const char *vp = val;
+                        int sign = 1;
+                        if (*vp == '-') { sign = -1; vp++; }
+                        while (*vp >= '0' && *vp <= '9') iv = iv * 10 + (*vp++ - '0');
+                        iv *= sign;
+
+                        if      (strcmp(key, "BR") == 0) { PARAMS_SetBrightness((uint8_t)iv);   leds_changed = 1; }
+                        else if (strcmp(key, "SF") == 0) { PARAMS_SetSliderFill((uint8_t)iv);   leds_changed = 1; }
+                        else if (strcmp(key, "SS") == 0) { PARAMS_SetSliderStyle((uint8_t)iv);  leds_changed = 1; }
+                        else if (strcmp(key, "BF") == 0) { PARAMS_SetButtonFill((uint8_t)iv);   leds_changed = 1; }
+                        else if (strcmp(key, "BS") == 0) { PARAMS_SetButtonStyle((uint8_t)iv);  leds_changed = 1; }
+                        else if (strcmp(key, "AS") == 0) { PARAMS_SetAnimSpeed((uint8_t)iv);    leds_changed = 1; }
+                        else if (key[0] == 'S' && key[1] == 'C' && key[2] >= '1' && key[2] <= '5') {
+                            /* SC1-SC5 : slider colour  R,G,B */
+                            uint8_t idx = (uint8_t)(key[2] - '1');
+                            int r = 0, g = 0, b = 0;
+                            sscanf(val, "%d,%d,%d", &r, &g, &b);
+                            PARAMS_SetSliderColor(idx, (uint8_t)r, (uint8_t)g, (uint8_t)b);
+                            leds_changed = 1;
+                        }
+                        else if (key[0] == 'B' && key[1] == 'C' && key[2] >= '1' && key[2] <= '6') {
+                            /* BC1-BC6 : button colour  R,G,B */
+                            uint8_t idx = (uint8_t)(key[2] - '1');
+                            int r = 0, g = 0, b = 0;
+                            sscanf(val, "%d,%d,%d", &r, &g, &b);
+                            PARAMS_SetButtonColor(idx, (uint8_t)r, (uint8_t)g, (uint8_t)b);
+                            leds_changed = 1;
+                        }
+                    }
+
+                    tok = sep ? sep + 1 : NULL;
+                }
+
+                if (leds_changed) {
+                    PARAMS_ApplyToLeds();
+                }
                 _send_reliable("ACK\r\n", 5);
             } else if (strcmp(s_rxBuf, "DISCONNECTED") == 0) {
                 s_connected = 0;
@@ -283,13 +351,12 @@ void COMM_SendSliders(const uint16_t *values, uint8_t count)
 
     /*
      * Delta filter – skip the transmission entirely if nothing changed
-     * beyond the noise threshold.  This eliminates idle USB traffic when
-     * the user is not touching the hardware.
+     * beyond the noise threshold.
      */
     static uint16_t s_dispAnchor[NUM_SLIDERS] = {0};
     static uint8_t s_dispAnchorInit = 0;
     if (!s_dispAnchorInit) {
-        for(uint8_t i=0; i<count; i++) s_dispAnchor[i] = values[i];
+        for (uint8_t i = 0; i < count; i++) s_dispAnchor[i] = values[i];
         s_dispAnchorInit = 1;
     }
 
@@ -298,16 +365,18 @@ void COMM_SendSliders(const uint16_t *values, uint8_t count)
         for (uint8_t i = 0; i < count; i++) {
             uint16_t prev = s_lastSent[i];
             uint16_t curr = values[i];
-            /* Absolute difference without using abs() to stay C89-compatible */
             uint16_t diff = (curr >= prev) ? (curr - prev) : (prev - curr);
-            if (diff > SLIDER_TX_THRESHOLD) {
-                changed = 1;
-            }
+            if (diff > SLIDER_TX_THRESHOLD) changed = 1;
 
-            uint16_t diff_anchor = (curr >= s_dispAnchor[i]) ? (curr - s_dispAnchor[i]) : (s_dispAnchor[i] - curr);
-            if (diff_anchor > 14) {
+            uint16_t diff_anchor = (curr >= s_dispAnchor[i]) ?
+                                   (curr - s_dispAnchor[i]) : (s_dispAnchor[i] - curr);
+            if (diff_anchor > 14u) {
                 s_dispAnchor[i] = curr;
-                DISPLAY_ShowOverride(PARAMS_GetSliderName(i));
+                /* Show Name (1x) and Value (2x) on the OLED */
+                char val[16];
+                int  pct = (int)((uint32_t)curr * 100u / 1024u);
+                snprintf(val, sizeof(val), "%d%%", pct);
+                DISPLAY_ShowOverride(PARAMS_GetSliderName(i), val);
             }
         }
 
@@ -357,7 +426,7 @@ void COMM_SendButtonPress(uint8_t index)
 {
     if (!s_connected) return;
 
-    DISPLAY_ShowOverride(PARAMS_GetButtonName(index));
+    DISPLAY_ShowOverride(PARAMS_GetButtonName(index), "");
 
     /*
      * Button presses are one-shot events – use the reliable path so a

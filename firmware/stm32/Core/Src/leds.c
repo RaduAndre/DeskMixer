@@ -115,13 +115,14 @@ static const uint8_t k_palette[][3] = {
  */
 #define ANIM_ROWS  (LED_SLIDER_COUNT + LED_BUTTON_COUNT)  /* 7 */
 
-#define SURF_TICK_MS  600u   /* ms the board is fully uniform before next wave */
-#define ROW_STEP_MS    50u   /* ms between successive rows adopting new color  */
-
 /*
- * Total sweep duration = ANIM_ROWS × ROW_STEP_MS = 7 × 50 = 350 ms.
- * Full animation cycle  = SURF_TICK_MS + sweep = ~950 ms.
+ * Animation timing – updated dynamically via LED_SetAnimSpeedLevel().
+ * speed=5 is the default (original hardcoded values).
+ *   SURF_TICK_MS = 3000 / speed
+ *   ROW_STEP_MS  = max(10, 250 / speed)
  */
+static uint32_t s_surfTickMs = 600u;
+static uint32_t s_rowStepMs  =  50u;
 
 typedef enum {
     SURF_UNIFORM,   /* all rows show current color; waiting for next tick     */
@@ -129,13 +130,45 @@ typedef enum {
 } SurfState;
 
 static SurfState s_surfState;
-static uint8_t   s_curColor;   /* palette index all rows settled on           */
-static uint8_t   s_nextColor;  /* palette index being swept in                */
-static uint8_t   s_sweepRow;   /* next row index to receive the new color     */
-static uint32_t  s_stateTime;  /* HAL_GetTick() timestamp of last state event */
+static uint8_t   s_curColor;
+static uint8_t   s_nextColor;
+static uint8_t   s_sweepRow;
+static uint32_t  s_stateTime;
 
 /* Per-row current palette index (tracks sweep progress). */
 static uint8_t s_rowColor[ANIM_ROWS];
+
+/* ── Dynamic LED configuration ──────────────────────────────────────────── */
+
+/*
+ * Brightness percentage 0-100.  Applied as a multiplier against
+ * LED_MAX_BRIGHT (51 = 20% of 255).  Default 80.
+ */
+static uint8_t s_brightness_pct = 80u;
+
+/* Helper: scale a raw [0-255] colour byte by the brightness percentage. */
+static inline uint8_t _brite(uint8_t c)
+{
+    return (uint8_t)((uint16_t)c * s_brightness_pct / 100u);
+}
+
+/*
+ * Per-slider/button custom colours.
+ * (0,0,0) means "use the animated palette colour" (default).
+ */
+static uint8_t s_slider_custom_r[LED_SLIDER_COUNT];
+static uint8_t s_slider_custom_g[LED_SLIDER_COUNT];
+static uint8_t s_slider_custom_b[LED_SLIDER_COUNT];
+
+static uint8_t s_button_custom_r[6];   /* one per physical button */
+static uint8_t s_button_custom_g[6];
+static uint8_t s_button_custom_b[6];
+
+/* Fill / style modes */
+static uint8_t s_slider_fill  = 1u;  /* 0=off  1=volume-bar  2=always-on  */
+static uint8_t s_button_fill  = 1u;  /* 0=off  1=on-press    2=always-on  */
+static uint8_t s_slider_style = 0u;  /* 0=surf (future styles reserved)   */
+static uint8_t s_button_style = 0u;
 
 /* ── Peripheral state (set from deskmixer.c) ────────────────────────────── */
 static uint16_t s_sliderRaw[LED_SLIDER_COUNT];  /* raw 12-bit [0..4095]  */
@@ -146,85 +179,89 @@ static uint8_t  s_buttonMask;                   /* bit i = button i held */
 static void rebuild_leds(void)
 {
     /* ── Slider VU bars ──────────────────────────────────────────────── */
-    /*
-     * 8 LEDs per slider, 512 ADC counts per segment.
-     *
-     *   full_leds = raw / 512   → number of fully-lit LEDs (0-8)
-     *   remainder = raw % 512   → position within the tip segment
-     *
-     * LED j behaviour:
-     *   j <  full_leds : fully lit   (palette color at 100% of 20% cap)
-     *   j == full_leds : tip LED – brightness scales linearly 0→full
-     *                    over the 512-count window
-     *                    → color component = (c[ch] * remainder) / 512
-     *   j >  full_leds : off
-     *
-     * All arithmetic is integer-only (no float, no division by zero).
-     */
     for (uint8_t s = 0; s < LED_SLIDER_COUNT; s++) {
-        const uint8_t *c    = k_palette[s_rowColor[s]];
-        uint8_t        base = s * LED_PER_SLIDER;
-        uint8_t  full_leds  = (uint8_t)(s_sliderRaw[s] / 512u);
-        uint16_t remainder  = s_sliderRaw[s] % 512u;
+        uint8_t base = s * LED_PER_SLIDER;
 
-        /* Clamp – should never exceed 8 but guard anyway */
-        if (full_leds > LED_PER_SLIDER) full_leds = LED_PER_SLIDER;
-
-        for (uint8_t j = 0; j < LED_PER_SLIDER; j++) {
-#if 0 /* Temporarily disable slider LEDs */
-            if (j < full_leds) {
-                /* Fully lit at palette color (≤ 20% brightness) */
-                s_leds[base + j].r = c[0];
-                s_leds[base + j].g = c[1];
-                s_leds[base + j].b = c[2];
-            } else if (j == full_leds && full_leds < LED_PER_SLIDER) {
-                /* Tip LED: linearly scale 0 → full over the 512-count window */
-                s_leds[base + j].r = (uint8_t)((c[0] * remainder) / 512u);
-                s_leds[base + j].g = (uint8_t)((c[1] * remainder) / 512u);
-                s_leds[base + j].b = (uint8_t)((c[2] * remainder) / 512u);
-            } else {
-                /* Off */
-                s_leds[base + j].r = 0;
-                s_leds[base + j].g = 0;
-                s_leds[base + j].b = 0;
+        if (s_slider_fill == 0u) {
+            /* Fill OFF – all slider LEDs dark */
+            for (uint8_t j = 0; j < LED_PER_SLIDER; j++) {
+                s_leds[base+j].r = 0; s_leds[base+j].g = 0; s_leds[base+j].b = 0;
             }
-#else
-            /* Off */
-            s_leds[base + j].r = 0;
-            s_leds[base + j].g = 0;
-            s_leds[base + j].b = 0;
-#endif
+            continue;
+        }
+
+        /* Resolve this slider's colour: custom or animated palette */
+        uint8_t pr, pg, pb;
+        if (s_slider_custom_r[s] || s_slider_custom_g[s] || s_slider_custom_b[s]) {
+            pr = s_slider_custom_r[s];
+            pg = s_slider_custom_g[s];
+            pb = s_slider_custom_b[s];
+        } else {
+            const uint8_t *c = k_palette[s_rowColor[s]];
+            pr = c[0]; pg = c[1]; pb = c[2];
+        }
+        pr = _brite(pr); pg = _brite(pg); pb = _brite(pb);
+
+        if (s_slider_fill == 2u) {
+            /* Always-on: all 8 LEDs fully lit */
+            for (uint8_t j = 0; j < LED_PER_SLIDER; j++) {
+                s_leds[base+j].r = pr; s_leds[base+j].g = pg; s_leds[base+j].b = pb;
+            }
+        } else {
+            /* Volume-bar (fill=1): proportional to ADC value */
+            uint8_t  full_leds = (uint8_t)(s_sliderRaw[s] / 512u);
+            uint16_t remainder = s_sliderRaw[s] % 512u;
+            if (full_leds > LED_PER_SLIDER) full_leds = LED_PER_SLIDER;
+
+            for (uint8_t j = 0; j < LED_PER_SLIDER; j++) {
+                if (j < full_leds) {
+                    s_leds[base+j].r = pr; s_leds[base+j].g = pg; s_leds[base+j].b = pb;
+                } else if (j == full_leds && full_leds < LED_PER_SLIDER) {
+                    s_leds[base+j].r = (uint8_t)((pr * remainder) / 512u);
+                    s_leds[base+j].g = (uint8_t)((pg * remainder) / 512u);
+                    s_leds[base+j].b = (uint8_t)((pb * remainder) / 512u);
+                } else {
+                    s_leds[base+j].r = 0; s_leds[base+j].g = 0; s_leds[base+j].b = 0;
+                }
+            }
         }
     }
 
     /* ── Button LEDs ─────────────────────────────────────────────────── */
-    /*
-     *   LED 40 → button 0,  LED 41 → button 1,  LED 42 → button 2
-     *   LED 43 → button 3,  LED 44 → button 4,  LED 45 → button 5
-     *
-     * Each button row silently tracks its color through the sweep wave
-     * via s_rowColor[], so the color is always up-to-date and ready.
-     * The LED is off while the button is released and lights instantly
-     * with that pre-tracked color the moment the button is pressed —
-     * no need to wait for the wave to arrive.
-     */
     for (uint8_t g = 0; g < LED_BUTTON_COUNT; g++) {
-        /* Color is always current — wave keeps s_rowColor up to date */
-        const uint8_t *c   = k_palette[s_rowColor[LED_SLIDER_COUNT + g]];
-        uint8_t        base = LED_SLIDER_COUNT * LED_PER_SLIDER + g * LED_PER_BUTTON;
+        uint8_t base = LED_SLIDER_COUNT * LED_PER_SLIDER + g * LED_PER_BUTTON;
 
         for (uint8_t j = 0; j < LED_PER_BUTTON; j++) {
-            uint8_t btn = g * LED_PER_BUTTON + j;
-            if ((s_buttonMask >> btn) & 1u) {
-                /* Button held → light immediately with current row color */
-                s_leds[base + j].r = c[0];
-                s_leds[base + j].g = c[1];
-                s_leds[base + j].b = c[2];
+            uint8_t btn = (uint8_t)(g * LED_PER_BUTTON + j);
+
+            /* Resolve this button's colour: custom or animated palette */
+            uint8_t pr, pg, pb;
+            if (btn < 6u &&
+                (s_button_custom_r[btn] || s_button_custom_g[btn] || s_button_custom_b[btn])) {
+                pr = s_button_custom_r[btn];
+                pg = s_button_custom_g[btn];
+                pb = s_button_custom_b[btn];
             } else {
-                /* Not pressed → off */
-                s_leds[base + j].r = 0;
-                s_leds[base + j].g = 0;
-                s_leds[base + j].b = 0;
+                const uint8_t *c = k_palette[s_rowColor[LED_SLIDER_COUNT + g]];
+                pr = c[0]; pg = c[1]; pb = c[2];
+            }
+            pr = _brite(pr); pg = _brite(pg); pb = _brite(pb);
+
+            uint8_t pressed = (uint8_t)((s_buttonMask >> btn) & 1u);
+
+            if (s_button_fill == 0u) {
+                /* Always off */
+                s_leds[base+j].r = 0; s_leds[base+j].g = 0; s_leds[base+j].b = 0;
+            } else if (s_button_fill == 2u) {
+                /* Always on */
+                s_leds[base+j].r = pr; s_leds[base+j].g = pg; s_leds[base+j].b = pb;
+            } else {
+                /* On-press (fill=1, default) */
+                if (pressed) {
+                    s_leds[base+j].r = pr; s_leds[base+j].g = pg; s_leds[base+j].b = pb;
+                } else {
+                    s_leds[base+j].r = 0; s_leds[base+j].g = 0; s_leds[base+j].b = 0;
+                }
             }
         }
     }
@@ -235,9 +272,15 @@ static void rebuild_leds(void)
 void LED_Init(void)
 {
     build_lookup();
-    memset(s_leds,      0, sizeof(s_leds));
-    memset(s_spiBuf,    0, sizeof(s_spiBuf));
-    memset(s_sliderRaw, 0, sizeof(s_sliderRaw));
+    memset(s_leds,              0, sizeof(s_leds));
+    memset(s_spiBuf,            0, sizeof(s_spiBuf));
+    memset(s_sliderRaw,         0, sizeof(s_sliderRaw));
+    memset(s_slider_custom_r,   0, sizeof(s_slider_custom_r));
+    memset(s_slider_custom_g,   0, sizeof(s_slider_custom_g));
+    memset(s_slider_custom_b,   0, sizeof(s_slider_custom_b));
+    memset(s_button_custom_r,   0, sizeof(s_button_custom_r));
+    memset(s_button_custom_g,   0, sizeof(s_button_custom_g));
+    memset(s_button_custom_b,   0, sizeof(s_button_custom_b));
     s_buttonMask = 0;
 
     /* Start with the first palette color on all rows */
@@ -312,8 +355,7 @@ void LED_Process(void)
     switch (s_surfState) {
 
     case SURF_UNIFORM:
-        /* Wait for the uniform dwell period, then kick off a new sweep. */
-        if ((now - s_stateTime) >= SURF_TICK_MS) {
+        if ((now - s_stateTime) >= s_surfTickMs) {
             s_surfState = SURF_SWEEPING;
             s_sweepRow  = 0;
             s_stateTime = now;
@@ -335,20 +377,15 @@ void LED_Process(void)
          *   ⋮
          *   t = 350 ms: row 6 → new color, board uniform, back to SURF_UNIFORM
          */
-        if ((now - s_stateTime) >= ROW_STEP_MS) {
-            /* Advance timer by exactly one step (not "now") to prevent drift */
-            s_stateTime += ROW_STEP_MS;
-
-            /* Commit new color to the next row in sequence */
+        if ((now - s_stateTime) >= s_rowStepMs) {
+            s_stateTime += s_rowStepMs;
             s_rowColor[s_sweepRow] = s_nextColor;
             s_sweepRow++;
-
             if (s_sweepRow >= ANIM_ROWS) {
-                /* All rows updated – become uniform with the new color */
                 s_curColor  = s_nextColor;
                 s_nextColor = (uint8_t)((s_nextColor + 1u) % PALETTE_SIZE);
                 s_surfState = SURF_UNIFORM;
-                s_stateTime = now;   /* full dwell starts from now */
+                s_stateTime = now;
             }
         }
         break;
@@ -384,4 +421,43 @@ void LED_Clear(void)
 {
     LED_Fill(0, 0, 0);
     LED_Show();
+}
+
+/* ── Dynamic configuration setters ────────────────────────────────────────── */
+
+void LED_SetBrightnessPct(uint8_t pct)
+{
+    if (pct > 100u) pct = 100u;
+    s_brightness_pct = pct;
+}
+
+void LED_SetAnimSpeedLevel(uint8_t speed)
+{
+    if (speed < 1u)  speed = 1u;
+    if (speed > 10u) speed = 10u;
+    /* SURF_TICK_MS = 3000/speed, ROW_STEP_MS = max(10, 250/speed) */
+    s_surfTickMs = 3000u / speed;
+    s_rowStepMs  = 250u  / speed;
+    if (s_rowStepMs < 10u) s_rowStepMs = 10u;
+}
+
+void LED_SetSliderFillMode(uint8_t fill)  { s_slider_fill  = fill;  }
+void LED_SetButtonFillMode(uint8_t fill)  { s_button_fill  = fill;  }
+void LED_SetSliderStyleMode(uint8_t style){ s_slider_style = style; }
+void LED_SetButtonStyleMode(uint8_t style){ s_button_style = style; }
+
+void LED_SetSliderColor(uint8_t idx, uint8_t r, uint8_t g, uint8_t b)
+{
+    if (idx >= LED_SLIDER_COUNT) return;
+    s_slider_custom_r[idx] = r;
+    s_slider_custom_g[idx] = g;
+    s_slider_custom_b[idx] = b;
+}
+
+void LED_SetButtonColor(uint8_t idx, uint8_t r, uint8_t g, uint8_t b)
+{
+    if (idx >= 6u) return;
+    s_button_custom_r[idx] = r;
+    s_button_custom_g[idx] = g;
+    s_button_custom_b[idx] = b;
 }

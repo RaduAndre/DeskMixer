@@ -26,6 +26,7 @@ from ui2.components.menu.settings_menu import SettingsMenu
 from ui2.components.menu.slider_menu import SliderMenu
 from ui2.components.menu.button_menu import ButtonMenu
 from ui2.components.menu.screen_menu import ScreenMenu
+from ui2.components.menu.led_settings_menu import LedSettingsMenu
 
 try:
     import win32com.client
@@ -37,9 +38,10 @@ except ImportError:
 class MenuBuilder:
     """Helper class for building menu content."""
     
-    def __init__(self, content_layout: QVBoxLayout, audio_manager=None):
+    def __init__(self, content_layout: QVBoxLayout, audio_manager=None, board_comm=None):
         self.content_layout = content_layout
         self.audio_manager = audio_manager
+        self.board_comm = board_comm
         self.menu_items = []
         self.sections = {}  # Track sections and their items
         self.current_section = None
@@ -61,6 +63,7 @@ class MenuBuilder:
         self.slider_menu = SliderMenu(self)
         self.button_menu = ButtonMenu(self)
         self.screen_menu = ScreenMenu(self)
+        self.led_settings_menu = LedSettingsMenu(self)
     
     def clear(self):
         """Clear all menu content."""
@@ -257,6 +260,7 @@ class MenuBuilder:
     def build_settings_menu(self):
         """Build the settings menu content."""
         self.settings_menu.build_menu()
+        self.led_settings_menu.build_section(self.board_comm)
 
     def refresh_theme(self):
         """Update styles for all current menu items."""

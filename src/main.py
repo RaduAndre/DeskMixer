@@ -78,8 +78,8 @@ def run_app():
     # Doing this after QApplication ensures Qt is ready
     from ui2.main_window import MainWindow
     
-    # Pass audio_manager and version to MainWindow
-    main_window = MainWindow(audio_manager=core.audio_manager, version=VERSION)
+    # Pass audio_manager, board_comm, and version to MainWindow
+    main_window = MainWindow(audio_manager=core.audio_manager, board_comm=core.board_comm, version=VERSION)
 
     # Bridge SerialHandler status updates to MainWindow
     def status_bridge(status, message):

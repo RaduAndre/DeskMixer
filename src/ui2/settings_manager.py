@@ -109,6 +109,88 @@ class SettingsManager:
         self.config_manager.has_changes = True
         self.save()
 
+    # --- LED Settings ---
+    def get_led_brightness(self) -> int:
+        return self.config_manager.get_config_value('led_brightness', 80)
+
+    def set_led_brightness(self, value: int):
+        self.config_manager.config['led_brightness'] = value
+        self.config_manager.has_changes = True
+        self.save()
+
+    def get_led_anim_speed(self) -> int:
+        return self.config_manager.get_config_value('led_anim_speed', 5)
+
+    def set_led_anim_speed(self, value: int):
+        self.config_manager.config['led_anim_speed'] = value
+        self.config_manager.has_changes = True
+        self.save()
+
+    def get_slider_led_fill(self) -> int:
+        return self.config_manager.get_config_value('led_slider_fill', 1)
+
+    def set_slider_led_fill(self, value: int):
+        self.config_manager.config['led_slider_fill'] = value
+        self.config_manager.has_changes = True
+        self.save()
+
+    def get_slider_led_style(self) -> int:
+        return self.config_manager.get_config_value('led_slider_style', 0)
+
+    def set_slider_led_style(self, value: int):
+        self.config_manager.config['led_slider_style'] = value
+        self.config_manager.has_changes = True
+        self.save()
+
+    def get_slider_color_mode(self) -> str:
+        return self.config_manager.get_config_value('led_slider_color_mode', "all")
+
+    def set_slider_color_mode(self, value: str):
+        self.config_manager.config['led_slider_color_mode'] = value
+        self.config_manager.has_changes = True
+        self.save()
+
+    def get_slider_led_colors(self) -> list:
+        return self.config_manager.get_config_value('led_slider_colors', [])
+
+    def set_slider_led_colors(self, value: list):
+        self.config_manager.config['led_slider_colors'] = value
+        self.config_manager.has_changes = True
+        self.save()
+
+    def get_button_led_fill(self) -> int:
+        return self.config_manager.get_config_value('led_button_fill', 1)
+
+    def set_button_led_fill(self, value: int):
+        self.config_manager.config['led_button_fill'] = value
+        self.config_manager.has_changes = True
+        self.save()
+
+    def get_button_led_style(self) -> int:
+        return self.config_manager.get_config_value('led_button_style', 0)
+
+    def set_button_led_style(self, value: int):
+        self.config_manager.config['led_button_style'] = value
+        self.config_manager.has_changes = True
+        self.save()
+
+    def get_button_color_mode(self) -> str:
+        return self.config_manager.get_config_value('led_button_color_mode', "all")
+
+    def set_button_color_mode(self, value: str):
+        self.config_manager.config['led_button_color_mode'] = value
+        self.config_manager.has_changes = True
+        self.save()
+
+    def get_button_led_colors(self) -> list:
+        return self.config_manager.get_config_value('led_button_colors', [])
+
+    def set_button_led_colors(self, value: list):
+        self.config_manager.config['led_button_colors'] = value
+        self.config_manager.has_changes = True
+        self.save()
+
+
     # --- New Methods for Positional Mapping (Index-based) ---
 
     def get_slider_binding_at_index(self, index: int) -> list[str]:

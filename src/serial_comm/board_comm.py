@@ -122,6 +122,8 @@ class BoardComm:
         """
         with self._lock:
             self._board_params = None
+        # Clear the params event so the next reconnect gets a fresh PARAMS_LIST.
+        self._params_event.clear()
         try:
             if self.serial_handler and self.serial_handler.is_connected():
                 self._enqueue("DISCONNECTED")
@@ -136,20 +138,26 @@ class BoardComm:
     def _connected_flow(self):
         """Background flow executed once the board is connected."""
         try:
+            # Reset params state so we don't pick up data from a previous session.
+            with self._lock:
+                self._board_params = None
+            self._params_event.clear()
+
             time.sleep(0.3)
             self._enqueue("CONNECTED")
 
-            # Wait until CONNECTED has been sent AND ACK'd before issuing
-            # GET_PARAMS.  Use a timed loop instead of join() so that a board
-            # that never ACKs (e.g. a USB hiccup right after connect) doesn't
-            # block this thread – and the flow_lock – forever.
+            # Wait until CONNECTED has been sent AND ACK'd before proceeding.
             deadline = time.monotonic() + (ACK_TIMEOUT * MAX_RETRIES) + 1.0
             while time.monotonic() < deadline:
                 if self._cmd_queue.unfinished_tasks == 0:
                     break
                 time.sleep(0.05)
 
-            time.sleep(0.05)  # brief guard for board to finish processing ACK
+            # The board sends PARAMS_LIST: automatically after the handshake
+            # (via s_send_params_pending in COMM_Process).  Give it up to 0.5 s
+            # to arrive so _fetch_board_params can return from cache instead of
+            # issuing a redundant GET_PARAMS.
+            time.sleep(0.5)
 
             board_params = self._fetch_board_params(timeout=3.0)
             host_params  = self._get_host_params()
@@ -323,15 +331,20 @@ class BoardComm:
 
     def _fetch_board_params(self, timeout: float = 3.0) -> dict | None:
         """
-        Send GET_PARAMS and wait for the board to reply.
-        Returns parsed params dict or None on timeout / PARAMS_NONE.
+        Return the board's current params dict.
 
-        Note: GET_PARAMS is NOT ACK'd – the board replies with PARAMS: or
-        PARAMS_NONE, so we bypass the ACK queue here.
+        The board sends PARAMS_LIST: spontaneously right after the handshake
+        (via s_send_params_pending).  If that line was already parsed and the
+        event is set we return immediately from cache.  Otherwise we issue
+        GET_PARAMS and wait for the reply.
         """
-        with self._lock:
-            if self._board_params is not None:
+        # If a spontaneous PARAMS_LIST: already arrived, return it immediately.
+        if self._params_event.is_set():
+            with self._lock:
                 return self._board_params
+
+        # Nothing cached yet – request explicitly.
+        with self._lock:
             self._board_params = None
         self._params_event.clear()
 
@@ -339,7 +352,7 @@ class BoardComm:
 
         if self._params_event.wait(timeout):
             with self._lock:
-                return self._board_params   # may be None for PARAMS_NONE
+                return self._board_params
         else:
             print("BoardComm: GET_PARAMS timed out")
             return None
@@ -670,6 +683,7 @@ class BoardComm:
             return str(name).strip()[:FLASH_NAME_LEN]
 
         parts = []
+        names_changed = False
 
         # ── Slider names ─────────────────────────────────────────────
         for i in range(NUM_SLIDERS):
@@ -680,6 +694,7 @@ class BoardComm:
                 cmd = f'Parameter_update: "Slider {i+1}", "{name_val}"'
                 self._enqueue(cmd)
                 print(f"BoardComm: queued {cmd}")
+                names_changed = True
 
         # ── Button names ─────────────────────────────────────────────
         for i in range(NUM_BUTTONS):
@@ -690,6 +705,7 @@ class BoardComm:
                 cmd = f'Parameter_update: "Button {i+1}", "{name_val}"'
                 self._enqueue(cmd)
                 print(f"BoardComm: queued {cmd}")
+                names_changed = True
 
         # ── LED scalar fields ─────────────────────────────────────────
         o_led = old.get("led", {})
@@ -726,6 +742,8 @@ class BoardComm:
             cmd = "SET_PARAMS:" + "|".join(parts)
             self._enqueue(cmd)
             print(f"BoardComm: queued partial SET_PARAMS ({len(parts)} field(s)) → {cmd[:120]}")
+            
+        if parts or names_changed:
             with self._lock:
                 self._last_sent_params = new
         else:

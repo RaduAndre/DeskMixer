@@ -67,10 +67,11 @@ void DISPLAY_ShowSplash(void);
 void DISPLAY_SetConnectionState(uint8_t connected);
 
 /**
- * @brief  Temporarily override the display to show a string (e.g. parameter name).
- * @param  text  Null-terminated string to show.
+ * @brief  Temporarily override the display to show a parameter name and optional value.
+ * @param  name  Null-terminated string for the name.
+ * @param  value Null-terminated string for the value (drawn 2x size). Can be NULL or empty.
  */
-void DISPLAY_ShowOverride(const char* text);
+void DISPLAY_ShowOverride(const char* name, const char* value);
 
 /**
  * @brief  Periodic tick for display state transitions. Call from main loop.

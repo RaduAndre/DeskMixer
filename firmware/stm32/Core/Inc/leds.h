@@ -111,4 +111,58 @@ void LED_Show(void);
  */
 void LED_Clear(void);
 
+/* ---- Dynamic configuration setters ------------------------------------ */
+
+/**
+ * @brief  Set LED brightness as a percentage of the hardware maximum.
+ * @param  pct  0-100 (0 = off, 100 = full 20% hardware cap)
+ */
+void LED_SetBrightnessPct(uint8_t pct);
+
+/**
+ * @brief  Set animation speed level.
+ * @param  speed  1 (slowest) … 10 (fastest). Default 5.
+ */
+void LED_SetAnimSpeedLevel(uint8_t speed);
+
+/**
+ * @brief  Set slider LED fill mode.
+ * @param  fill  0=off  1=volume-bar  2=always-on
+ */
+void LED_SetSliderFillMode(uint8_t fill);
+
+/**
+ * @brief  Set button LED fill mode.
+ * @param  fill  0=off  1=on-press  2=always-on
+ */
+void LED_SetButtonFillMode(uint8_t fill);
+
+/**
+ * @brief  Set slider animation style (stored; future style switching).
+ * @param  style  0 = surf (default)
+ */
+void LED_SetSliderStyleMode(uint8_t style);
+
+/**
+ * @brief  Set button animation style (stored; future style switching).
+ * @param  style  0 = surf (default)
+ */
+void LED_SetButtonStyleMode(uint8_t style);
+
+/**
+ * @brief  Set a custom RGB colour for one slider strip.
+ *         (0,0,0) = revert to animated palette colour.
+ * @param  idx   Slider index [0..LED_SLIDER_COUNT-1]
+ * @param  r,g,b RGB components [0-255]
+ */
+void LED_SetSliderColor(uint8_t idx, uint8_t r, uint8_t g, uint8_t b);
+
+/**
+ * @brief  Set a custom RGB colour for one button LED.
+ *         (0,0,0) = revert to animated palette colour.
+ * @param  idx   Button index [0..5]
+ * @param  r,g,b RGB components [0-255]
+ */
+void LED_SetButtonColor(uint8_t idx, uint8_t r, uint8_t g, uint8_t b);
+
 #endif /* LEDS_H */

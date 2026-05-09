@@ -37,9 +37,10 @@ class MainWindow(QMainWindow):
     # Signal for thread-safe device config updates
     config_update_signal = Signal(object)
     
-    def __init__(self, audio_manager=None, version="Unknown"):
+    def __init__(self, audio_manager=None, board_comm=None, version="Unknown"):
         super().__init__()
         self.audio_manager = audio_manager
+        self.board_comm = board_comm
         self.version = version  # Store version for settings menu
         
         # Window setup
@@ -1049,6 +1050,10 @@ class MainWindow(QMainWindow):
         # but if we do bulk, we might want to optimize? 
         # Currently it auto-saves. That's fine for user interaction speed.
         
+        # Trigger board synchronization so that new names are displayed on the device screen
+        if hasattr(self, 'board_comm') and self.board_comm:
+            self.board_comm.sync_params_if_changed()
+        
     def  update_slider_layout(self):
         """Re-render sliders in correct order."""
         if not hasattr(self, 'sliders_layout'):
@@ -1261,7 +1266,7 @@ class MainWindow(QMainWindow):
         menu_layout.addWidget(scroll_area)
         
         # Menu builder
-        self.menu_builder = MenuBuilder(self.menu_content_layout, self.audio_manager)
+        self.menu_builder = MenuBuilder(self.menu_content_layout, self.audio_manager, self.board_comm)
         self.menu_builder.version = self.version  # Pass version for settings menu display
         # self.menu_builder.on_alignment_changed = self.update_button_grid # Deprecated
         self.menu_builder.on_grid_changed = lambda r, c: self.update_button_grid((r, c))
