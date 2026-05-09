@@ -40,8 +40,8 @@
 #include <stdint.h>
 
 /* ---- Configuration ----------------------------------------------------- */
-#define COMM_TX_BUF_SIZE   256
-#define COMM_RX_BUF_SIZE   128
+#define COMM_TX_BUF_SIZE   512
+#define COMM_RX_BUF_SIZE   256
 
 /* ---- Public API -------------------------------------------------------- */
 
@@ -82,5 +82,10 @@ void COMM_SendButtonPress(uint8_t index);
  * @param  str  Null-terminated string to send (max COMM_TX_BUF_SIZE-1 bytes)
  */
 void COMM_Send(const char *str);
+
+/**
+ * @brief  Processes communication tasks such as 30s ping and connection state handling
+ */
+void COMM_Process(void);
 
 #endif /* COMM_H */

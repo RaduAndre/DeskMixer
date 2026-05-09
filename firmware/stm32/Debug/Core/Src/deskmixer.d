@@ -29,7 +29,8 @@ Core/Src/deskmixer.o: ../Core/Src/deskmixer.c ../Core/Inc/deskmixer.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_spi.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_ll_usb.h \
- ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd_ex.h
+ ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd_ex.h \
+ ../Core/Inc/params.h
 ../Core/Inc/deskmixer.h:
 ../Core/Inc/sliders.h:
 ../Core/Inc/buttons.h:
@@ -67,3 +68,4 @@ Core/Src/deskmixer.o: ../Core/Src/deskmixer.c ../Core/Inc/deskmixer.h \
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_ll_usb.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd_ex.h:
+../Core/Inc/params.h:

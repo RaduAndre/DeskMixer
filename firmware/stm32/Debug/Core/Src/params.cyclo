@@ -1,0 +1,9 @@
+../Core/Src/params.c:28:13:set_default	1
+../Core/Src/params.c:44:6:PARAMS_Init	1
+../Core/Src/params.c:48:6:PARAMS_Load	2
+../Core/Src/params.c:56:6:PARAMS_Save	1
+../Core/Src/params.c:61:6:PARAMS_Update	13
+../Core/Src/params.c:84:6:PARAMS_Process	2
+../Core/Src/params.c:91:6:PARAMS_SendList	1
+../Core/Src/params.c:99:13:PARAMS_GetSliderName	6
+../Core/Src/params.c:110:13:PARAMS_GetButtonName	7

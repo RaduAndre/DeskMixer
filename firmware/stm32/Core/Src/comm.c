@@ -62,6 +62,8 @@
 #include "sliders.h"   /* NUM_SLIDERS */
 #include "buttons.h"   /* NUM_BUTTONS */
 #include "main.h"      /* HAL_GetTick */
+#include "display.h"   /* DISPLAY_Clear, DISPLAY_DrawString, DISPLAY_Flush, DISPLAY_ShowSplash */
+#include "params.h"    /* PARAMS_SendList, PARAMS_Update */
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -123,6 +125,22 @@ static uint8_t  s_lastSentValid = 0;   /* 0 until first transmission */
  */
 static uint8_t s_connected = 0;
 
+static uint32_t s_lastPingTime = 0;
+static uint8_t s_send_params_pending = 0;
+
+/*
+ * Post-connect burst counter.
+ * After every successful handshake this is set to COMM_CONNECT_BURST.
+ * COMM_SendSliders() sends unconditionally (bypassing the delta filter)
+ * while this counter is non-zero, decrementing it each call.  This
+ * guarantees the host receives a full snapshot of all slider positions
+ * right after connecting even if no slider has moved past the threshold.
+ * The counter is checked/decremented inside COMM_SendSliders so the
+ * main loop is never stalled waiting for the burst to complete.
+ */
+#define COMM_CONNECT_BURST  20u
+static uint8_t s_burst_remaining = 0;
+
 /* ── Internal helpers ────────────────────────────────────────────────── */
 
 /*
@@ -177,8 +195,8 @@ void COMM_Init(void)
      */
     _send_reliable(HANDSHAKE_RESPONSE, (uint16_t)(sizeof(HANDSHAKE_RESPONSE) - 1));
 
-    /* Mark connected so slider TX is enabled immediately on startup */
-    s_connected = 1;
+    /* Mark disconnected so we show Disconnected until handshake */
+    s_connected = 0;
 }
 
 void COMM_OnRxData(const uint8_t *buf, uint32_t len)
@@ -200,11 +218,45 @@ void COMM_OnRxData(const uint8_t *buf, uint32_t len)
             if (strcmp(s_rxBuf, HANDSHAKE_REQUEST) == 0) {
                 /* Host is re-requesting handshake – re-arm connection state */
                 s_connected = 1;
+                s_burst_remaining = COMM_CONNECT_BURST; /* send 20 frames unconditionally */
+                s_lastPingTime = HAL_GetTick();
                 _send_reliable(HANDSHAKE_RESPONSE,
                                (uint16_t)(sizeof(HANDSHAKE_RESPONSE) - 1));
+                s_send_params_pending = 1;
+            } else if (strncmp(s_rxBuf, "Parameter_update: ", 18) == 0) {
+                char *ptr = s_rxBuf + 18;
+                if (*ptr == '"') {
+                    ptr++;
+                    char *name_end = strchr(ptr, '"');
+                    if (name_end) {
+                        *name_end = '\0';
+                        char *name = ptr;
+                        ptr = name_end + 1;
+                        char *val_start = strchr(ptr, '"');
+                        if (val_start) {
+                            val_start++;
+                            char *val_end = strchr(val_start, '"');
+                            if (val_end) {
+                                *val_end = '\0';
+                                PARAMS_Update(name, val_start);
+                            }
+                        }
+                    }
+                }
+                _send_reliable("ACK\r\n", 5);
+            } else if (strncmp(s_rxBuf, "SET_PARAMS:", 11) == 0) {
+                /* Handled elsewhere or just ACK to avoid timeout */
+                _send_reliable("ACK\r\n", 5);
+            } else if (strcmp(s_rxBuf, "DISCONNECTED") == 0) {
+                s_connected = 0;
+                _send_reliable("ACK\r\n", 5);
+            } else if (strcmp(s_rxBuf, "GET_PARAMS") == 0) {
+                s_send_params_pending = 1;
             } else if (strcmp(s_rxBuf, "GET_CONFIG") == 0) {
                 _send_reliable(CONFIG_RESPONSE,
                                (uint16_t)(sizeof(CONFIG_RESPONSE) - 1));
+            } else if (strcmp(s_rxBuf, "CONNECTED") == 0) {
+                _send_reliable("ACK\r\n", 5);
             }
             /* Unknown commands silently ignored (future extension point) */
 
@@ -234,6 +286,13 @@ void COMM_SendSliders(const uint16_t *values, uint8_t count)
      * beyond the noise threshold.  This eliminates idle USB traffic when
      * the user is not touching the hardware.
      */
+    static uint16_t s_dispAnchor[NUM_SLIDERS] = {0};
+    static uint8_t s_dispAnchorInit = 0;
+    if (!s_dispAnchorInit) {
+        for(uint8_t i=0; i<count; i++) s_dispAnchor[i] = values[i];
+        s_dispAnchorInit = 1;
+    }
+
     if (s_lastSentValid) {
         uint8_t changed = 0;
         for (uint8_t i = 0; i < count; i++) {
@@ -243,10 +302,29 @@ void COMM_SendSliders(const uint16_t *values, uint8_t count)
             uint16_t diff = (curr >= prev) ? (curr - prev) : (prev - curr);
             if (diff > SLIDER_TX_THRESHOLD) {
                 changed = 1;
-                break;
+            }
+
+            uint16_t diff_anchor = (curr >= s_dispAnchor[i]) ? (curr - s_dispAnchor[i]) : (s_dispAnchor[i] - curr);
+            if (diff_anchor > 14) {
+                s_dispAnchor[i] = curr;
+                DISPLAY_ShowOverride(PARAMS_GetSliderName(i));
             }
         }
-        if (!changed) return;   /* Nothing to send – bandwidth saved */
+
+        /*
+         * Post-connect burst: bypass the delta-filter gate for the first
+         * COMM_CONNECT_BURST calls after a handshake so the host gets a
+         * full slider snapshot immediately.  We decrement here (inside
+         * the s_lastSentValid block so the very first ever send, which
+         * always passes through, is counted separately).
+         * The main loop is never blocked – one frame per loop iteration.
+         */
+        if (s_burst_remaining > 0) {
+            s_burst_remaining--;
+            /* fall through to transmit unconditionally */
+        } else if (!changed) {
+            return;   /* Nothing to send – bandwidth saved */
+        }
     }
 
     /*
@@ -277,6 +355,10 @@ void COMM_SendSliders(const uint16_t *values, uint8_t count)
 
 void COMM_SendButtonPress(uint8_t index)
 {
+    if (!s_connected) return;
+
+    DISPLAY_ShowOverride(PARAMS_GetButtonName(index));
+
     /*
      * Button presses are one-shot events – use the reliable path so a
      * transient USBD_BUSY does not silently drop a keypress.
@@ -291,4 +373,26 @@ void COMM_Send(const char *str)
     uint16_t len = (uint16_t)strlen(str);
     if (len == 0) return;
     _send_reliable(str, len);
+}
+
+void COMM_Process(void)
+{
+    uint32_t now = HAL_GetTick();
+
+    if (s_connected) {
+        if (now - s_lastPingTime >= 30000) {
+            s_lastPingTime = now;
+            COMM_Send("PING\r\n");
+        }
+    }
+
+    if (s_send_params_pending) {
+        s_send_params_pending = 0;
+        PARAMS_SendList();
+    }
+    
+    PARAMS_Process();
+
+    /* Let display module know about the connection status */
+    DISPLAY_SetConnectionState(s_connected);
 }

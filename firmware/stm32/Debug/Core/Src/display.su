@@ -6,3 +6,6 @@
 ../Core/Src/display.c:215:6:DISPLAY_DrawChar	24	static
 ../Core/Src/display.c:230:6:DISPLAY_DrawString	16	static
 ../Core/Src/display.c:238:6:DISPLAY_ShowSplash	24	static
+../Core/Src/display.c:274:6:DISPLAY_SetConnectionState	16	static
+../Core/Src/display.c:289:6:DISPLAY_ShowOverride	16	static
+../Core/Src/display.c:298:6:DISPLAY_Process	24	static

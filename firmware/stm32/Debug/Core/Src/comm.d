@@ -28,7 +28,8 @@ Core/Src/comm.o: ../Core/Src/comm.c ../Core/Inc/comm.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_spi.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_ll_usb.h \
- ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd_ex.h
+ ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd_ex.h \
+ ../Core/Inc/display.h ../Core/Inc/params.h
 ../Core/Inc/comm.h:
 ../Core/Inc/sliders.h:
 ../Core/Inc/buttons.h:
@@ -62,3 +63,5 @@ Core/Src/comm.o: ../Core/Src/comm.c ../Core/Inc/comm.h \
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_ll_usb.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd_ex.h:
+../Core/Inc/display.h:
+../Core/Inc/params.h:

@@ -38,6 +38,7 @@
 #include "display.h"
 #include "flash.h"
 #include "main.h"
+#include "params.h"
 
 /* ── Configuration ───────────────────────────────────────────────────── */
 #define SEND_INTERVAL_MS   10   /**< Slider sample + transmit interval (ms) */
@@ -51,6 +52,7 @@ void DESKMIXER_Init(void)
 {
     /* 1. Flash (non-fatal if absent) */
     FLASH_Init();
+    PARAMS_Init();
 
     /* 2. OLED display */
     if (DISPLAY_Init() == 0)
@@ -80,6 +82,10 @@ void DESKMIXER_Init(void)
 
 void DESKMIXER_Run(void)
 {
+    /* ── Step 0: Communication background tasks ───────────────────────── */
+    COMM_Process();
+    DISPLAY_Process();
+
     /* ── Step 1: Poll buttons (every loop for low latency) ─────────────── */
     BUTTONS_Read();
 

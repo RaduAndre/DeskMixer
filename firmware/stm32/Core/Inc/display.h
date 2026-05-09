@@ -60,4 +60,21 @@ void DISPLAY_DrawString(uint8_t col, uint8_t page, const char *str);
  */
 void DISPLAY_ShowSplash(void);
 
+/**
+ * @brief  Update the display's awareness of the USB connection state.
+ * @param  connected  1 if connected, 0 if disconnected.
+ */
+void DISPLAY_SetConnectionState(uint8_t connected);
+
+/**
+ * @brief  Temporarily override the display to show a string (e.g. parameter name).
+ * @param  text  Null-terminated string to show.
+ */
+void DISPLAY_ShowOverride(const char* text);
+
+/**
+ * @brief  Periodic tick for display state transitions. Call from main loop.
+ */
+void DISPLAY_Process(void);
+
 #endif /* DISPLAY_H */

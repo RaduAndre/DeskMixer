@@ -120,6 +120,8 @@ class BoardComm:
         retries that — if reconnection is fast — end up being sent to the
         newly connected board, corrupting its GET_CONFIG sequence.
         """
+        with self._lock:
+            self._board_params = None
         try:
             if self.serial_handler and self.serial_handler.is_connected():
                 self._enqueue("DISCONNECTED")
@@ -189,6 +191,13 @@ class BoardComm:
         if line == "ACK":
             # Signal the queue worker that the last command was received
             self._ack_event.set()
+            return True
+            
+        if line == "PING":
+            return True
+
+        if line.startswith("PARAMS_LIST:"):
+            self._parse_params_list(line)
             return True
 
         if line.startswith("PARAMS:"):
@@ -321,6 +330,8 @@ class BoardComm:
         PARAMS_NONE, so we bypass the ACK queue here.
         """
         with self._lock:
+            if self._board_params is not None:
+                return self._board_params
             self._board_params = None
         self._params_event.clear()
 
@@ -332,6 +343,41 @@ class BoardComm:
         else:
             print("BoardComm: GET_PARAMS timed out")
             return None
+
+    def _parse_params_list(self, line: str):
+        """
+        Parse a PARAMS_LIST:... response into a dict.
+        Format: PARAMS_LIST: "Slider 1":"Spotify"|"Slider 2":"Chrome"...
+        """
+        payload = line[len("PARAMS_LIST: "):].strip()
+        tokens = payload.split('|')
+        sliders = [""] * NUM_SLIDERS
+        buttons = [""] * NUM_BUTTONS
+        
+        for token in tokens:
+            if ":" not in token: continue
+            k, v = token.split(':', 1)
+            k = k.strip('"')
+            v = v.strip('"')
+            if k.startswith("Slider"):
+                try: 
+                    idx = int(k.split()[1]) - 1
+                    if 0 <= idx < NUM_SLIDERS: sliders[idx] = v
+                except: pass
+            elif k.startswith("Button"):
+                try: 
+                    idx = int(k.split()[1]) - 1
+                    if 0 <= idx < NUM_BUTTONS: buttons[idx] = v
+                except: pass
+                
+        with self._lock:
+            # retain LED parameters from any existing _board_params if they exist
+            led = {}
+            if self._board_params and "led" in self._board_params:
+                led = self._board_params["led"]
+            self._board_params = {"sliders": sliders, "buttons": buttons, "led": led}
+        self._params_event.set()
+        print(f"BoardComm: received params list from board → {self._board_params}")
 
     def _parse_params_line(self, line: str):
         """
@@ -577,9 +623,13 @@ class BoardComm:
 
         parts = []
         for i, name in enumerate(params["sliders"]):
-            parts.append(f"S{i+1}:{_clamp(name)}")
+            cmd = f'Parameter_update: "Slider {i+1}", "{_clamp(name)}"'
+            self._enqueue(cmd)
+            print(f"BoardComm: queued {cmd}")
         for i, name in enumerate(params["buttons"]):
-            parts.append(f"B{i+1}:{_clamp(name)}")
+            cmd = f'Parameter_update: "Button {i+1}", "{_clamp(name)}"'
+            self._enqueue(cmd)
+            print(f"BoardComm: queued {cmd}")
 
         led = params.get("led", {})
         if led.get("brightness") is not None:
@@ -601,9 +651,11 @@ class BoardComm:
             if rgb:
                 parts.append(f"BC{i+1}:{rgb[0]},{rgb[1]},{rgb[2]}")
 
-        cmd = "SET_PARAMS:" + "|".join(parts)
-        self._enqueue(cmd)
-        print(f"BoardComm: queued SET_PARAMS → {cmd[:120]}...")
+        if parts:
+            cmd = "SET_PARAMS:" + "|".join(parts)
+            self._enqueue(cmd)
+            print(f"BoardComm: queued SET_PARAMS → {cmd[:120]}...")
+            
         with self._lock:
             self._last_sent_params = params
 
@@ -624,14 +676,20 @@ class BoardComm:
             o = ((old.get("sliders") or [""] * NUM_SLIDERS) + [""] * NUM_SLIDERS)[i]
             n = ((new.get("sliders") or [""] * NUM_SLIDERS) + [""] * NUM_SLIDERS)[i]
             if o.strip() != n.strip():
-                parts.append(f"S{i+1}:{_clamp(n)}")
+                name_val = _clamp(n)
+                cmd = f'Parameter_update: "Slider {i+1}", "{name_val}"'
+                self._enqueue(cmd)
+                print(f"BoardComm: queued {cmd}")
 
         # ── Button names ─────────────────────────────────────────────
         for i in range(NUM_BUTTONS):
             o = ((old.get("buttons") or [""] * NUM_BUTTONS) + [""] * NUM_BUTTONS)[i]
             n = ((new.get("buttons") or [""] * NUM_BUTTONS) + [""] * NUM_BUTTONS)[i]
             if o.strip() != n.strip():
-                parts.append(f"B{i+1}:{_clamp(n)}")
+                name_val = _clamp(n)
+                cmd = f'Parameter_update: "Button {i+1}", "{name_val}"'
+                self._enqueue(cmd)
+                print(f"BoardComm: queued {cmd}")
 
         # ── LED scalar fields ─────────────────────────────────────────
         o_led = old.get("led", {})

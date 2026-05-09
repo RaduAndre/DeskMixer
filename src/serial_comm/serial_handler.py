@@ -540,6 +540,10 @@ class SerialHandler:
 
             clean_data = data.strip()
 
+            # Print configuration/RX traffic (skip slider/button/ACK stream to avoid spam)
+            if clean_data and not clean_data.startswith("Slider") and not clean_data.startswith("Button") and not clean_data.startswith("ACK") and not clean_data.startswith("PING"):
+                print(f"[Serial] RX: {clean_data}")
+
             # Check for handshake response
             if self.handshake_response in clean_data:
                 self.handshake_received = True
@@ -627,6 +631,9 @@ class SerialHandler:
                 # Ensure data ends with newline if not present
                 if not data.endswith('\n'):
                     data += '\n'
+
+                if not data.startswith("PING") and not data.startswith("ACK"):
+                    print(f"[Serial] TX: {data.strip()}")
 
                 hr, bytes_written = win32file.WriteFile(self.serial_handle, data.encode('utf-8'), overlapped)
 

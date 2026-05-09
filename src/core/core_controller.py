@@ -4,6 +4,7 @@ from config.config_manager import ConfigManager
 from utils.error_handler import log_error
 from audio.audio_manager import AudioManager
 from serial_comm.serial_handler import SerialHandler
+from serial_comm.board_comm import BoardComm
 from utils.system_startup import set_startup, check_startup_status
 
 class CoreController:
@@ -15,9 +16,13 @@ class CoreController:
         self.config_manager = ConfigManager()
         self.audio_manager = AudioManager()
         self.serial_handler = SerialHandler(self.config_manager)
+        self.board_comm = BoardComm(self.serial_handler, self.config_manager)
         
         # Connect components
         self.audio_manager.set_handlers(self.serial_handler, self.config_manager)
+        self.serial_handler.add_reconnect_callback(self.board_comm.on_connected)
+        self.serial_handler.add_disconnect_callback(self.board_comm.on_disconnected)
+        self.serial_handler.add_callback(self.board_comm.handle_board_line)
         
         # Initialize state
         self.is_running = True

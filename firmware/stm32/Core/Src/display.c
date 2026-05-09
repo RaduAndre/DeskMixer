@@ -255,3 +255,80 @@ void DISPLAY_ShowSplash(void)
 
     DISPLAY_Flush();
 }
+
+/* ── State Management ────────────────────────────────────────────────── */
+
+typedef enum {
+    DISP_STATE_DISCONNECTED = 0,
+    DISP_STATE_CONNECTED_MSG = 1,
+    DISP_STATE_IDLE = 2,
+    DISP_STATE_OVERRIDE = 3
+} DisplayState_t;
+
+static DisplayState_t s_disp_state = DISP_STATE_DISCONNECTED;
+static uint32_t s_connected_msg_time = 0;
+static uint32_t s_override_time = 0;
+static char s_override_text[32] = {0};
+static uint8_t s_force_redraw = 1;
+
+void DISPLAY_SetConnectionState(uint8_t connected) {
+    if (!connected) {
+        if (s_disp_state != DISP_STATE_DISCONNECTED) {
+            s_disp_state = DISP_STATE_DISCONNECTED;
+            s_force_redraw = 1;
+        }
+    } else {
+        if (s_disp_state == DISP_STATE_DISCONNECTED) {
+            s_disp_state = DISP_STATE_CONNECTED_MSG;
+            s_connected_msg_time = HAL_GetTick();
+            s_force_redraw = 1;
+        }
+    }
+}
+
+void DISPLAY_ShowOverride(const char* text) {
+    strncpy(s_override_text, text, sizeof(s_override_text)-1);
+    s_override_time = HAL_GetTick();
+    if (s_disp_state != DISP_STATE_OVERRIDE) {
+        s_disp_state = DISP_STATE_OVERRIDE;
+    }
+    s_force_redraw = 1;
+}
+
+void DISPLAY_Process(void) {
+    uint32_t now = HAL_GetTick();
+
+    if (s_disp_state == DISP_STATE_CONNECTED_MSG) {
+        if (now - s_connected_msg_time >= 5000) {
+            s_disp_state = DISP_STATE_IDLE;
+            s_force_redraw = 1;
+        }
+    } else if (s_disp_state == DISP_STATE_OVERRIDE) {
+        if (now - s_override_time >= 2000) {
+            s_disp_state = DISP_STATE_IDLE;
+            s_force_redraw = 1;
+        }
+    }
+
+    if (s_force_redraw) {
+        s_force_redraw = 0;
+        if (s_disp_state == DISP_STATE_DISCONNECTED) {
+            DISPLAY_Clear();
+            DISPLAY_DrawString(28, 3, "Disconnected");
+            DISPLAY_Flush();
+        } else if (s_disp_state == DISP_STATE_CONNECTED_MSG) {
+            DISPLAY_Clear();
+            DISPLAY_DrawString(37, 3, "Connected");
+            DISPLAY_Flush();
+        } else if (s_disp_state == DISP_STATE_IDLE) {
+            DISPLAY_ShowSplash();
+        } else if (s_disp_state == DISP_STATE_OVERRIDE) {
+            DISPLAY_Clear();
+            int len = strlen(s_override_text);
+            int x = 64 - (len * 3);
+            if (x < 0) x = 0;
+            DISPLAY_DrawString(x, 3, s_override_text);
+            DISPLAY_Flush();
+        }
+    }
+}
