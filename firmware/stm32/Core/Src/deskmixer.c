@@ -17,8 +17,8 @@
  *    2. Update button LED mask
  *    3. LED animation tick + DMA push (non-blocking)
  *
- *  Every SEND_INTERVAL_MS (10 ms):
- *    4. Read all 5 ADC channels (≈ 20 µs)
+ *  Every SEND_INTERVAL_MS (5 ms):
+ *    4. Read all 5 ADC channels (≈ 30 µs)
  *    5. Update LED VU bar values from fresh ADC data
  *    6. Transmit slider packet (only if any value changed – see comm.c)
  *
@@ -41,7 +41,7 @@
 #include "params.h"
 
 /* ── Configuration ───────────────────────────────────────────────────── */
-#define SEND_INTERVAL_MS   10   /**< Slider sample + transmit interval (ms) */
+#define SEND_INTERVAL_MS    5   /**< Slider sample + transmit interval (ms) */
 
 /* ── State ───────────────────────────────────────────────────────────── */
 static uint32_t s_lastSendTime = 0;
@@ -128,10 +128,12 @@ void DESKMIXER_Run(void)
         /* Read all 5 ADC channels (~20 µs total) */
         SLIDERS_Read();
 
-        /* Push fresh values to LED VU bars (raw 12-bit for sub-segment PWM) */
-        const uint16_t *rawVals = SLIDERS_GetRaw();
+        /* Push scaled values [0-1024] to LED VU bars.
+         * LED_SetSliderValue() now works in the 0-1024 domain so the
+         * 8-LED bar fills perfectly at value 1024 (8 × 128 = 1024). */
+        const uint16_t *scaledVals = SLIDERS_GetAll();
         for (uint8_t i = 0; i < NUM_SLIDERS; i++) {
-            LED_SetSliderValue(i, rawVals[i]);
+            LED_SetSliderValue(i, scaledVals[i]);
         }
 
         /* Transmit slider packet (comm.c skips if nothing changed) */

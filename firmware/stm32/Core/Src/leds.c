@@ -41,12 +41,13 @@
  *      - Once all rows reach the new color the board is uniform again,
  *        then a new palette step begins.
  *
- *   2. Slider VU bars (LEDs 0–39) – raw 12-bit ADC [0..4095]:
- *      - 8 LEDs per slider, 512 counts per LED segment.
+ *   2. Slider VU bars (LEDs 0–39) – scaled value [0..1024]:
+ *      - 8 LEDs per slider, 128 counts per LED segment (8×128=1024).
+ *      - Value 1024 (physical max, post-peg) lights all 8 LEDs fully.
  *      - LEDs below the tip segment are fully lit at 20% brightness.
  *      - The tip LED (the one partially within its segment) scales
- *        linearly 0→20% across its 512-count window.
- *        Example: raw=256 → LED 0 at 50% of 20% (≈ 10% abs brightness).
+ *        linearly 0→20% across its 128-count window.
+ *        Example: value=64 → LED 0 at 50% of 20% (≈ 10% abs brightness).
  *      - LEDs above the tip are off.
  *
  *   3. Button LEDs (LEDs 40–45):
@@ -171,7 +172,7 @@ static uint8_t s_slider_style = 0u;  /* 0=surf (future styles reserved)   */
 static uint8_t s_button_style = 0u;
 
 /* ── Peripheral state (set from deskmixer.c) ────────────────────────────── */
-static uint16_t s_sliderRaw[LED_SLIDER_COUNT];  /* raw 12-bit [0..4095]  */
+static uint16_t s_sliderScaled[LED_SLIDER_COUNT];  /* scaled [0..1024]  */
 static uint8_t  s_buttonMask;                   /* bit i = button i held */
 
 /* ── Internal rebuild ───────────────────────────────────────────────────── */
@@ -208,18 +209,19 @@ static void rebuild_leds(void)
                 s_leds[base+j].r = pr; s_leds[base+j].g = pg; s_leds[base+j].b = pb;
             }
         } else {
-            /* Volume-bar (fill=1): proportional to ADC value */
-            uint8_t  full_leds = (uint8_t)(s_sliderRaw[s] / 512u);
-            uint16_t remainder = s_sliderRaw[s] % 512u;
+            /* Volume-bar (fill=1): proportional to scaled value [0-1024].   */
+            /* Segment size: 128 counts/LED → 8 × 128 = 1024 = all LEDs full. */
+            uint8_t  full_leds = (uint8_t)(s_sliderScaled[s] / 128u);
+            uint16_t remainder = s_sliderScaled[s] % 128u;
             if (full_leds > LED_PER_SLIDER) full_leds = LED_PER_SLIDER;
 
             for (uint8_t j = 0; j < LED_PER_SLIDER; j++) {
                 if (j < full_leds) {
                     s_leds[base+j].r = pr; s_leds[base+j].g = pg; s_leds[base+j].b = pb;
                 } else if (j == full_leds && full_leds < LED_PER_SLIDER) {
-                    s_leds[base+j].r = (uint8_t)((pr * remainder) / 512u);
-                    s_leds[base+j].g = (uint8_t)((pg * remainder) / 512u);
-                    s_leds[base+j].b = (uint8_t)((pb * remainder) / 512u);
+                    s_leds[base+j].r = (uint8_t)((pr * remainder) / 128u);
+                    s_leds[base+j].g = (uint8_t)((pg * remainder) / 128u);
+                    s_leds[base+j].b = (uint8_t)((pb * remainder) / 128u);
                 } else {
                     s_leds[base+j].r = 0; s_leds[base+j].g = 0; s_leds[base+j].b = 0;
                 }
@@ -274,7 +276,7 @@ void LED_Init(void)
     build_lookup();
     memset(s_leds,              0, sizeof(s_leds));
     memset(s_spiBuf,            0, sizeof(s_spiBuf));
-    memset(s_sliderRaw,         0, sizeof(s_sliderRaw));
+    memset(s_sliderScaled,      0, sizeof(s_sliderScaled));
     memset(s_slider_custom_r,   0, sizeof(s_slider_custom_r));
     memset(s_slider_custom_g,   0, sizeof(s_slider_custom_g));
     memset(s_slider_custom_b,   0, sizeof(s_slider_custom_b));
@@ -322,24 +324,24 @@ void LED_RedToBlue(void)
 }
 
 /*
- * Deadzone applied in LED_SetSliderValue to prevent ADC noise from flickering
- * the tip LED.  Any change smaller than this (in raw 12-bit counts) is
- * silently ignored.  12 counts ≈ 0.3% of full scale.
+ * Deadzone applied in LED_SetSliderValue to prevent noise from flickering
+ * the tip LED.  Any change smaller than this (in 0-1024 scaled counts) is
+ * silently ignored.  3 counts ≈ 0.3% of full scale.
  */
-#define SLIDER_DEADZONE  12u
+#define SLIDER_DEADZONE  3u
 
-void LED_SetSliderValue(uint8_t sliderIndex, uint16_t rawValue)
+void LED_SetSliderValue(uint8_t sliderIndex, uint16_t scaledValue)
 {
     if (sliderIndex >= LED_SLIDER_COUNT) return;
-    if (rawValue > 4095u) rawValue = 4095u;
+    if (scaledValue > 1024u) scaledValue = 1024u;
 
     /* Deadzone: ignore tiny changes caused by ADC noise */
-    uint16_t prev  = s_sliderRaw[sliderIndex];
-    int16_t  delta = (int16_t)rawValue - (int16_t)prev;
+    uint16_t prev  = s_sliderScaled[sliderIndex];
+    int16_t  delta = (int16_t)scaledValue - (int16_t)prev;
     if (delta < 0) delta = -delta;
     if ((uint16_t)delta <= SLIDER_DEADZONE) return;
 
-    s_sliderRaw[sliderIndex] = rawValue;
+    s_sliderScaled[sliderIndex] = scaledValue;
 }
 
 void LED_SetButtonMask(uint8_t mask)

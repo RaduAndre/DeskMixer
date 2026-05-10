@@ -8,8 +8,10 @@
  *   value = raw_12bit >> 2   (equivalent to raw / 4 ≈ raw * 1024 / 4096)
  *
  * This gives exactly 0-1023 for raw 0-4095, with 1024 reserved for a
- * physically-pegged maximum.  The Python host divides by 1024.0 to get
- * a float [0.0-1.0] ready for the Windows audio API.
+ * physically-pegged maximum.  Any raw reading >= 4060 (~99.1% of ADC
+ * range) is clamped to 1024 so real-world potentiometers that cannot
+ * mechanically reach the absolute ADC ceiling still report 100%.
+ * The Python host divides by 1024.0 to get a float [0.0-1.0].
  *
  * Channel mapping:
  *   Slider 1 → ADC1_IN0 (PA0, physical pin 10)
@@ -55,7 +57,10 @@ void SLIDERS_Read(void)
     static uint8_t first_read = 1;
     ADC_ChannelConfTypeDef sConfig = {0};
     sConfig.Rank           = ADC_REGULAR_RANK_1;
-    sConfig.SamplingTime   = ADC_SAMPLETIME_239CYCLES_5; /* max sample time for stability */
+    sConfig.SamplingTime   = ADC_SAMPLETIME_71CYCLES_5;  /* 71.5 cyc @ 12 MHz ≈ 6 µs/ch;
+                                                           * 5 ch × 6 µs ≈ 30 µs total.
+                                                           * Adequate for ≤10 kΩ source impedance
+                                                           * (STM32F1 spec requires ≈0.4 µs min). */
 
     for (uint8_t i = 0; i < NUM_SLIDERS; i++) {
         /* Re-configure ADC to the next channel */
@@ -79,10 +84,11 @@ void SLIDERS_Read(void)
             
             /* Use the filtered value for the mapped result */
             /* Map raw 12-bit [0-4095] → [0-1024] via power-of-two shift.   */
-            /* raw >> 2 = raw / 4 → range [0-1023].  Clamp 4092-4095 to     */
-            /* 1024 so a fully-pegged slider reaches exactly max.            */
+            /* raw >> 2 = raw / 4 → range [0-1023].  Clamp anything >= 3900 */
+            /* (~95.2% of ADC range) to 1024 so real-world potentiometers   */
+            /* that cannot reach the absolute ADC ceiling still report 100%. */
             uint16_t mapped = (uint16_t)(s_raw12[i] >> 2u);
-            if (s_raw12[i] >= 4092u) mapped = 1024u;
+            if (s_raw12[i] >= 3900u) mapped = 1024u;
             s_values[i] = mapped;
         }
 

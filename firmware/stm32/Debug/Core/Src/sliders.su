@@ -1,5 +1,5 @@
-../Core/Src/sliders.c:43:6:SLIDERS_Init	8	static
-../Core/Src/sliders.c:53:6:SLIDERS_Read	32	static
-../Core/Src/sliders.c:95:10:SLIDERS_GetValue	16	static
-../Core/Src/sliders.c:101:17:SLIDERS_GetAll	4	static
-../Core/Src/sliders.c:106:17:SLIDERS_GetRaw	4	static
+../Core/Src/sliders.c:45:6:SLIDERS_Init	8	static
+../Core/Src/sliders.c:55:6:SLIDERS_Read	32	static
+../Core/Src/sliders.c:101:10:SLIDERS_GetValue	16	static
+../Core/Src/sliders.c:107:17:SLIDERS_GetAll	4	static
+../Core/Src/sliders.c:112:17:SLIDERS_GetRaw	4	static
