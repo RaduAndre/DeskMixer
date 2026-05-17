@@ -143,11 +143,15 @@ void LED_SetButtonFillMode(uint8_t fill);
  */
 void LED_SetSliderStyleMode(uint8_t style);
 
+void LED_SetSliderColorMode(uint8_t mode);
+
 /**
  * @brief  Set button animation style (stored; future style switching).
  * @param  style  0 = surf (default)
  */
 void LED_SetButtonStyleMode(uint8_t style);
+
+void LED_SetButtonColorMode(uint8_t mode);
 
 /**
  * @brief  Set a custom RGB colour for one slider strip.

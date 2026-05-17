@@ -21,7 +21,9 @@ const char* PARAMS_GetButtonName(uint8_t index);
 /* ── LED params – setters (mark save pending) ─────────────────────── */
 void PARAMS_SetBrightness(uint8_t pct);          /* 0-100              */
 void PARAMS_SetSliderStyle(uint8_t style);       /* 0-N                */
+void PARAMS_SetSliderMode(uint8_t mode);         /* 0=All/Rand 1=Per/Custom */
 void PARAMS_SetButtonStyle(uint8_t style);       /* 0-N                */
+void PARAMS_SetButtonMode(uint8_t mode);         /* 0=All/Rand 1=Per/Custom */
 void PARAMS_SetSliderFill(uint8_t fill);         /* 0=off 1=vol 2=full */
 void PARAMS_SetButtonFill(uint8_t fill);         /* 0=off 1=press 2=on */
 void PARAMS_SetAnimSpeed(uint8_t speed);         /* 1-10               */
@@ -31,7 +33,9 @@ void PARAMS_SetButtonColor(uint8_t idx, uint8_t r, uint8_t g, uint8_t b);
 /* ── LED params – getters ─────────────────────────────────────────── */
 uint8_t PARAMS_GetBrightness(void);
 uint8_t PARAMS_GetSliderStyle(void);
+uint8_t PARAMS_GetSliderMode(void);
 uint8_t PARAMS_GetButtonStyle(void);
+uint8_t PARAMS_GetButtonMode(void);
 uint8_t PARAMS_GetSliderFill(void);
 uint8_t PARAMS_GetButtonFill(void);
 uint8_t PARAMS_GetAnimSpeed(void);

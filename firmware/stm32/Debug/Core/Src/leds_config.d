@@ -1,4 +1,4 @@
-Core/Src/leds.o: ../Core/Src/leds.c ../Core/Inc/leds.h \
+Core/Src/leds_config.o: ../Core/Src/leds_config.c ../Core/Inc/leds.h \
  ../Core/Inc/leds_anim.h ../Core/Inc/leds.h ../Core/Inc/main.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h \
  ../Core/Inc/stm32f1xx_hal_conf.h \
@@ -28,8 +28,7 @@ Core/Src/leds.o: ../Core/Src/leds.c ../Core/Inc/leds.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_spi.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_ll_usb.h \
- ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd_ex.h \
- ../Core/Inc/main.h
+ ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd_ex.h
 ../Core/Inc/leds.h:
 ../Core/Inc/leds_anim.h:
 ../Core/Inc/leds.h:
@@ -63,4 +62,3 @@ Core/Src/leds.o: ../Core/Src/leds.c ../Core/Inc/leds.h \
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_ll_usb.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pcd_ex.h:
-../Core/Inc/main.h:

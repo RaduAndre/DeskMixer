@@ -12,7 +12,7 @@
  * (names-only) struct automatically re-initialise to safe defaults
  * the first time they boot with this firmware.
  */
-#define PARAMS_MAGIC  0xA55B
+#define PARAMS_MAGIC  0xA55C
 
 /* ── Flash layout ──────────────────────────────────────────────────────── */
 
@@ -33,7 +33,9 @@ typedef struct {
     /* LED configuration */
     uint8_t brightness;    /* 0-100 %                          */
     uint8_t slider_style;  /* 0-N animation style              */
+    uint8_t slider_mode;   /* 0=All/Rand 1=Per/Custom          */
     uint8_t button_style;  /* 0-N animation style              */
+    uint8_t button_mode;   /* 0=All/Rand 1=Per/Custom          */
     uint8_t slider_fill;   /* 0=off  1=volume  2=always-on     */
     uint8_t button_fill;   /* 0=off  1=on-press  2=always-on   */
     uint8_t anim_speed;    /* 1-10 (5 = default speed)         */
@@ -72,7 +74,9 @@ static void set_default(void)
     /* LED defaults (match Python host defaults) */
     s_params.brightness   = 80;
     s_params.slider_style = 0;
+    s_params.slider_mode  = 0;
     s_params.button_style = 0;
+    s_params.button_mode  = 0;
     s_params.slider_fill  = 1;
     s_params.button_fill  = 1;
     s_params.anim_speed   = 5;
@@ -151,15 +155,28 @@ void PARAMS_Update(const char *param_name, const char *param_value)
 
 void PARAMS_SendList(void)
 {
-    char buf[512];
+    char buf[768];
     snprintf(buf, sizeof(buf),
-        "PARAMS_LIST: \"Slider 1\":\"%s\"|\"Slider 2\":\"%s\"|\"Slider 3\":\"%s\""
-        "|\"Slider 4\":\"%s\"|\"Slider 5\":\"%s\""
-        "|\"Button 1\":\"%s\"|\"Button 2\":\"%s\"|\"Button 3\":\"%s\""
-        "|\"Button 4\":\"%s\"|\"Button 5\":\"%s\"|\"Button 6\":\"%s\"\r\n",
+        "PARAMS:S1:%s|S2:%s|S3:%s|S4:%s|S5:%s"
+        "|B1:%s|B2:%s|B3:%s|B4:%s|B5:%s|B6:%s"
+        "|BR:%d|SF:%d|SS:%d|SM:%d|BF:%d|BS:%d|BM:%d|AS:%d"
+        "|SC1:%d,%d,%d|SC2:%d,%d,%d|SC3:%d,%d,%d|SC4:%d,%d,%d|SC5:%d,%d,%d"
+        "|BC1:%d,%d,%d|BC2:%d,%d,%d|BC3:%d,%d,%d|BC4:%d,%d,%d|BC5:%d,%d,%d|BC6:%d,%d,%d\r\n",
         s_params.s1, s_params.s2, s_params.s3, s_params.s4, s_params.s5,
-        s_params.b1, s_params.b2, s_params.b3, s_params.b4, s_params.b5,
-        s_params.b6);
+        s_params.b1, s_params.b2, s_params.b3, s_params.b4, s_params.b5, s_params.b6,
+        s_params.brightness, s_params.slider_fill, s_params.slider_style, s_params.slider_mode,
+        s_params.button_fill, s_params.button_style, s_params.button_mode, s_params.anim_speed,
+        s_params.slider_colors[0][0], s_params.slider_colors[0][1], s_params.slider_colors[0][2],
+        s_params.slider_colors[1][0], s_params.slider_colors[1][1], s_params.slider_colors[1][2],
+        s_params.slider_colors[2][0], s_params.slider_colors[2][1], s_params.slider_colors[2][2],
+        s_params.slider_colors[3][0], s_params.slider_colors[3][1], s_params.slider_colors[3][2],
+        s_params.slider_colors[4][0], s_params.slider_colors[4][1], s_params.slider_colors[4][2],
+        s_params.button_colors[0][0], s_params.button_colors[0][1], s_params.button_colors[0][2],
+        s_params.button_colors[1][0], s_params.button_colors[1][1], s_params.button_colors[1][2],
+        s_params.button_colors[2][0], s_params.button_colors[2][1], s_params.button_colors[2][2],
+        s_params.button_colors[3][0], s_params.button_colors[3][1], s_params.button_colors[3][2],
+        s_params.button_colors[4][0], s_params.button_colors[4][1], s_params.button_colors[4][2],
+        s_params.button_colors[5][0], s_params.button_colors[5][1], s_params.button_colors[5][2]);
     COMM_Send(buf);
 }
 
@@ -207,10 +224,24 @@ void PARAMS_SetSliderStyle(uint8_t style)
     s_save_pending = 1;
 }
 
+void PARAMS_SetSliderMode(uint8_t mode)
+{
+    if (s_params.slider_mode == mode) return;
+    s_params.slider_mode = mode;
+    s_save_pending = 1;
+}
+
 void PARAMS_SetButtonStyle(uint8_t style)
 {
     if (s_params.button_style == style) return;
     s_params.button_style = style;
+    s_save_pending = 1;
+}
+
+void PARAMS_SetButtonMode(uint8_t mode)
+{
+    if (s_params.button_mode == mode) return;
+    s_params.button_mode = mode;
     s_save_pending = 1;
 }
 
@@ -259,7 +290,9 @@ void PARAMS_SetButtonColor(uint8_t idx, uint8_t r, uint8_t g, uint8_t b)
 
 uint8_t PARAMS_GetBrightness(void)   { return s_params.brightness;   }
 uint8_t PARAMS_GetSliderStyle(void)  { return s_params.slider_style;  }
+uint8_t PARAMS_GetSliderMode(void)   { return s_params.slider_mode;   }
 uint8_t PARAMS_GetButtonStyle(void)  { return s_params.button_style;  }
+uint8_t PARAMS_GetButtonMode(void)   { return s_params.button_mode;   }
 uint8_t PARAMS_GetSliderFill(void)   { return s_params.slider_fill;   }
 uint8_t PARAMS_GetButtonFill(void)   { return s_params.button_fill;   }
 uint8_t PARAMS_GetAnimSpeed(void)    { return s_params.anim_speed;    }
@@ -285,7 +318,9 @@ void PARAMS_ApplyToLeds(void)
     LED_SetSliderFillMode(s_params.slider_fill);
     LED_SetButtonFillMode(s_params.button_fill);
     LED_SetSliderStyleMode(s_params.slider_style);
+    LED_SetSliderColorMode(s_params.slider_mode);
     LED_SetButtonStyleMode(s_params.button_style);
+    LED_SetButtonColorMode(s_params.button_mode);
 
     for (uint8_t i = 0; i < PARAMS_NUM_SLIDERS; i++) {
         LED_SetSliderColor(i,

@@ -11,6 +11,9 @@ C_SRCS += \
 ../Core/Src/display.c \
 ../Core/Src/flash.c \
 ../Core/Src/leds.c \
+../Core/Src/leds_anim.c \
+../Core/Src/leds_config.c \
+../Core/Src/leds_core.c \
 ../Core/Src/main.c \
 ../Core/Src/params.c \
 ../Core/Src/sliders.c \
@@ -27,6 +30,9 @@ OBJS += \
 ./Core/Src/display.o \
 ./Core/Src/flash.o \
 ./Core/Src/leds.o \
+./Core/Src/leds_anim.o \
+./Core/Src/leds_config.o \
+./Core/Src/leds_core.o \
 ./Core/Src/main.o \
 ./Core/Src/params.o \
 ./Core/Src/sliders.o \
@@ -43,6 +49,9 @@ C_DEPS += \
 ./Core/Src/display.d \
 ./Core/Src/flash.d \
 ./Core/Src/leds.d \
+./Core/Src/leds_anim.d \
+./Core/Src/leds_config.d \
+./Core/Src/leds_core.d \
 ./Core/Src/main.d \
 ./Core/Src/params.d \
 ./Core/Src/sliders.d \
@@ -60,7 +69,7 @@ Core/Src/%.o Core/Src/%.su Core/Src/%.cyclo: ../Core/Src/%.c Core/Src/subdir.mk
 clean: clean-Core-2f-Src
 
 clean-Core-2f-Src:
-	-$(RM) ./Core/Src/buttons.cyclo ./Core/Src/buttons.d ./Core/Src/buttons.o ./Core/Src/buttons.su ./Core/Src/comm.cyclo ./Core/Src/comm.d ./Core/Src/comm.o ./Core/Src/comm.su ./Core/Src/deskmixer.cyclo ./Core/Src/deskmixer.d ./Core/Src/deskmixer.o ./Core/Src/deskmixer.su ./Core/Src/display.cyclo ./Core/Src/display.d ./Core/Src/display.o ./Core/Src/display.su ./Core/Src/flash.cyclo ./Core/Src/flash.d ./Core/Src/flash.o ./Core/Src/flash.su ./Core/Src/leds.cyclo ./Core/Src/leds.d ./Core/Src/leds.o ./Core/Src/leds.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/params.cyclo ./Core/Src/params.d ./Core/Src/params.o ./Core/Src/params.su ./Core/Src/sliders.cyclo ./Core/Src/sliders.d ./Core/Src/sliders.o ./Core/Src/sliders.su ./Core/Src/stm32f1xx_hal_msp.cyclo ./Core/Src/stm32f1xx_hal_msp.d ./Core/Src/stm32f1xx_hal_msp.o ./Core/Src/stm32f1xx_hal_msp.su ./Core/Src/stm32f1xx_it.cyclo ./Core/Src/stm32f1xx_it.d ./Core/Src/stm32f1xx_it.o ./Core/Src/stm32f1xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su ./Core/Src/system_stm32f1xx.cyclo ./Core/Src/system_stm32f1xx.d ./Core/Src/system_stm32f1xx.o ./Core/Src/system_stm32f1xx.su
+	-$(RM) ./Core/Src/buttons.cyclo ./Core/Src/buttons.d ./Core/Src/buttons.o ./Core/Src/buttons.su ./Core/Src/comm.cyclo ./Core/Src/comm.d ./Core/Src/comm.o ./Core/Src/comm.su ./Core/Src/deskmixer.cyclo ./Core/Src/deskmixer.d ./Core/Src/deskmixer.o ./Core/Src/deskmixer.su ./Core/Src/display.cyclo ./Core/Src/display.d ./Core/Src/display.o ./Core/Src/display.su ./Core/Src/flash.cyclo ./Core/Src/flash.d ./Core/Src/flash.o ./Core/Src/flash.su ./Core/Src/leds.cyclo ./Core/Src/leds.d ./Core/Src/leds.o ./Core/Src/leds.su ./Core/Src/leds_anim.cyclo ./Core/Src/leds_anim.d ./Core/Src/leds_anim.o ./Core/Src/leds_anim.su ./Core/Src/leds_config.cyclo ./Core/Src/leds_config.d ./Core/Src/leds_config.o ./Core/Src/leds_config.su ./Core/Src/leds_core.cyclo ./Core/Src/leds_core.d ./Core/Src/leds_core.o ./Core/Src/leds_core.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/params.cyclo ./Core/Src/params.d ./Core/Src/params.o ./Core/Src/params.su ./Core/Src/sliders.cyclo ./Core/Src/sliders.d ./Core/Src/sliders.o ./Core/Src/sliders.su ./Core/Src/stm32f1xx_hal_msp.cyclo ./Core/Src/stm32f1xx_hal_msp.d ./Core/Src/stm32f1xx_hal_msp.o ./Core/Src/stm32f1xx_hal_msp.su ./Core/Src/stm32f1xx_it.cyclo ./Core/Src/stm32f1xx_it.d ./Core/Src/stm32f1xx_it.o ./Core/Src/stm32f1xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su ./Core/Src/system_stm32f1xx.cyclo ./Core/Src/system_stm32f1xx.d ./Core/Src/system_stm32f1xx.o ./Core/Src/system_stm32f1xx.su
 
 .PHONY: clean-Core-2f-Src
 

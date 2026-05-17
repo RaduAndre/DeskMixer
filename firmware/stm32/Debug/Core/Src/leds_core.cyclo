@@ -1,0 +1,7 @@
+../Core/Src/leds_core.c:40:13:build_lookup	5
+../Core/Src/leds_core.c:54:6:LED_Init	1
+../Core/Src/leds_core.c:83:6:LED_SetColor	2
+../Core/Src/leds_core.c:91:6:LED_Fill	2
+../Core/Src/leds_core.c:100:6:LED_RedToBlue	1
+../Core/Src/leds_core.c:107:6:LED_Show	3
+../Core/Src/leds_core.c:125:6:LED_Clear	1

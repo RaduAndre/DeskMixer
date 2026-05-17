@@ -213,7 +213,7 @@ class GenericSelector(QWidget):
         layout.addStretch()
 
     def _select(self, idx: int):
-        if idx != self._current:
+        if idx != self._current and 0 <= idx < len(self._btns):
             self._current = idx
             for i, btn in enumerate(self._btns):
                 btn.setStyleSheet(_style_item_style(i == idx))
@@ -222,13 +222,34 @@ class GenericSelector(QWidget):
     def get_value(self) -> int:
         return self._current
 
+    def update_options(self, options: list):
+        for btn in self._btns:
+            btn.deleteLater()
+        self._btns = []
+        layout = self.layout()
+        # Remove old stretch
+        item = layout.takeAt(layout.count() - 1)
+        if item:
+            layout.removeItem(item)
+        for i, name in enumerate(options):
+            btn = QPushButton(name)
+            btn.setCheckable(False)
+            btn.setStyleSheet(_style_item_style(i == self._current))
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda checked, idx=i: self._select(idx))
+            layout.addWidget(btn)
+            self._btns.append(btn)
+        layout.addStretch()
+        if self._current >= len(options):
+            self._select(0)
+
 
 # ── Colour selector block (handles All vs By Slider) ─────────────────────────────────────
 
 class ColorSelectorBlock(QWidget):
     colors_changed = Signal(list)
     
-    def __init__(self, initial_colors, label_prefix, is_all_mode=False, parent=None):
+    def __init__(self, initial_colors, label_prefix, mode_idx=0, parent=None):
         super().__init__(parent)
         self.label_prefix = label_prefix
         self.num_colors = len(initial_colors)
@@ -247,7 +268,6 @@ class ColorSelectorBlock(QWidget):
         lbl_all = QLabel("All")
         lbl_all.setStyleSheet(f"color: {colors.WHITE}; font-size: 10px; background:transparent; border:none;")
         lbl_all.setAlignment(Qt.AlignHCenter)
-        # Use the first color for "all"
         self.swatch_all = ColorSwatchButton(initial_hex=_rgb_to_hex(initial_colors[0]))
         self.swatch_all.color_changed.connect(self._on_all_changed)
         col_all.addWidget(lbl_all, 0, Qt.AlignHCenter)
@@ -276,24 +296,96 @@ class ColorSelectorBlock(QWidget):
         l_multi.addStretch()
         self.stack.addWidget(self.page_multi)
         
-        self.set_mode(is_all_mode)
+        # Page 2: Dynamic Palette
+        self.page_dyn = QWidget()
+        l_dyn = QHBoxLayout(self.page_dyn)
+        l_dyn.setContentsMargins(12, 4, 12, 4)
+        l_dyn.setSpacing(8)
+        self.dyn_swatches_layout = QHBoxLayout()
+        self.dyn_swatches_layout.setSpacing(8)
+        l_dyn.addLayout(self.dyn_swatches_layout)
         
-    def set_mode(self, is_all_mode: bool):
-        self.stack.setCurrentIndex(0 if is_all_mode else 1)
+        self.dyn_btn_add = QPushButton("+")
+        self.dyn_btn_add.setFixedSize(32, 32)
+        self.dyn_btn_add.setStyleSheet(f"QPushButton {{ background: transparent; color: {colors.WHITE}; border: 1px dashed {colors.BORDER}; border-radius: 4px; font-weight: bold; }} QPushButton:hover {{ border: 1px dashed {colors.ACCENT}; color: {colors.ACCENT}; }}")
+        self.dyn_btn_add.setCursor(Qt.PointingHandCursor)
+        self.dyn_btn_add.clicked.connect(self._dyn_add_color)
+        
+        self.dyn_btn_rm = QPushButton("-")
+        self.dyn_btn_rm.setFixedSize(32, 32)
+        self.dyn_btn_rm.setStyleSheet(f"QPushButton {{ background: transparent; color: {colors.WHITE}; border: 1px dashed {colors.BORDER}; border-radius: 4px; font-weight: bold; }} QPushButton:hover {{ border: 1px dashed #FF4444; color: #FF4444; }}")
+        self.dyn_btn_rm.setCursor(Qt.PointingHandCursor)
+        self.dyn_btn_rm.clicked.connect(self._dyn_rm_color)
+        
+        l_dyn.addWidget(self.dyn_btn_add)
+        l_dyn.addWidget(self.dyn_btn_rm)
+        l_dyn.addStretch()
+        self.stack.addWidget(self.page_dyn)
+        
+        self.dyn_colors = []
+        for rgb in initial_colors:
+            if rgb == [0,0,0] and len(self.dyn_colors) >= 3:
+                continue
+            self.dyn_colors.append(list(rgb))
+        while len(self.dyn_colors) < 3:
+            self.dyn_colors.append([0, 61, 61])
+        if len(self.dyn_colors) > self.num_colors:
+            self.dyn_colors = self.dyn_colors[:self.num_colors]
+            
+        self.dyn_swatches = []
+        self._dyn_rebuild()
+        
+        self.set_mode(mode_idx)
+        
+    def set_mode(self, mode_idx: int):
+        self.stack.setCurrentIndex(mode_idx)
         
     def _on_all_changed(self, hex_color: str):
         rgb = _hex_to_rgb(hex_color)
         res = [rgb] * self.num_colors
-        # Sync multi swatches to match the new "all" color
         for sw in self._swatches:
             sw.set_color(hex_color)
         self.colors_changed.emit(res)
         
     def _on_multi_changed(self, idx: int, hex_color: str):
         res = [_hex_to_rgb(sw.get_color()) for sw in self._swatches]
-        # Sync the "all" swatch to the first item
         if idx == 0:
             self.swatch_all.set_color(hex_color)
+        self.colors_changed.emit(res)
+        
+    def _dyn_rebuild(self):
+        while self.dyn_swatches_layout.count():
+            item = self.dyn_swatches_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.dyn_swatches = []
+        for i, rgb in enumerate(self.dyn_colors):
+            sw = ColorSwatchButton(initial_hex=_rgb_to_hex(rgb))
+            sw.color_changed.connect(lambda h, idx=i: self._on_dyn_changed(idx, h))
+            self.dyn_swatches_layout.addWidget(sw)
+            self.dyn_swatches.append(sw)
+        self.dyn_btn_add.setVisible(len(self.dyn_colors) < self.num_colors)
+        self.dyn_btn_rm.setVisible(len(self.dyn_colors) > 3)
+        self._dyn_emit()
+        
+    def _dyn_add_color(self):
+        if len(self.dyn_colors) < self.num_colors:
+            self.dyn_colors.append(list(self.dyn_colors[-1]))
+            self._dyn_rebuild()
+            
+    def _dyn_rm_color(self):
+        if len(self.dyn_colors) > 3:
+            self.dyn_colors.pop()
+            self._dyn_rebuild()
+            
+    def _on_dyn_changed(self, idx: int, hex_color: str):
+        self.dyn_colors[idx] = _hex_to_rgb(hex_color)
+        self._dyn_emit()
+        
+    def _dyn_emit(self):
+        res = [list(c) for c in self.dyn_colors]
+        while len(res) < self.num_colors:
+            res.append([0, 0, 0])
         self.colors_changed.emit(res)
 
 
@@ -323,7 +415,7 @@ class LedSettingsMenu:
 
     def build_section(self, board_comm=None):
         """Append a 'LEDs' section to the currently open settings menu."""
-        self.menu_builder.add_head("LEDs")
+        self.menu_builder.add_head("LEDs", expandable=True, expanded=True)
 
         layout = self.menu_builder.sections["LEDs"]["layout"]
         self._board_comm = board_comm
@@ -345,12 +437,14 @@ class LedSettingsMenu:
         layout.addWidget(self.anim_speed_slider)
 
         # ── Sliders ──────────────────────────────────────────────────
+        # Firmware fill: 0=off  1=always-on  2=volume-bar
         layout.addWidget(_make_row_label("Slider Fill"))
         self.slider_fill = GenericSelector(["None", "Full", "Volume based"], current=settings_manager.get_slider_led_fill())
         layout.addWidget(self.slider_fill)
 
         self.lbl_s_style = _make_row_label("Slider Style")
         layout.addWidget(self.lbl_s_style)
+        # Styles: 0=Surf 1=Solid 2=Pulse 3=VU Bar 4=Starlight
         self.slider_style = GenericSelector(["Surf", "Solid", "Pulse", "VU Bar", "Starlight"], current=settings_manager.get_slider_led_style())
         layout.addWidget(self.slider_style)
 
@@ -365,7 +459,7 @@ class LedSettingsMenu:
         s_colors = settings_manager.get_slider_led_colors()
         while len(s_colors) < 5:
             s_colors.append([0, 61, 61])
-        self.slider_colors = ColorSelectorBlock(s_colors[:5], "S", is_all_mode=(s_mode_str=="all"))
+        self.slider_colors = ColorSelectorBlock(s_colors[:5], "S", mode_idx=0 if (s_mode_str=="all") else 1)
         layout.addWidget(self.slider_colors)
 
         self.slider_fill.selection_changed.connect(self._on_slider_fill)
@@ -374,13 +468,16 @@ class LedSettingsMenu:
         self.slider_colors.colors_changed.connect(self._on_slider_colors)
 
         # ── Buttons ──────────────────────────────────────────────────
+        # Firmware fill: 0=off  1=on-press  2=always-on
         layout.addWidget(_make_row_label("Button Fill"))
         self.button_fill = GenericSelector(["None", "On press", "Always"], current=settings_manager.get_button_led_fill())
         layout.addWidget(self.button_fill)
 
         self.lbl_b_style = _make_row_label("Button Style")
         layout.addWidget(self.lbl_b_style)
-        self.button_style = GenericSelector(["Surf", "Solid", "Pulse", "VU Bar", "Starlight"], current=settings_manager.get_button_led_style())
+        # VU Bar removed for buttons (no volume data per button)
+        # Styles: 0=Surf 1=Solid 2=Pulse 3=Starlight
+        self.button_style = GenericSelector(["Surf", "Solid", "Pulse", "Starlight"], current=min(settings_manager.get_button_led_style(), 3))
         layout.addWidget(self.button_style)
 
         self.lbl_b_mode = _make_row_label("Button Color Mode")
@@ -394,7 +491,7 @@ class LedSettingsMenu:
         b_colors = settings_manager.get_button_led_colors()
         while len(b_colors) < 6:
             b_colors.append([61, 20, 0])
-        self.button_colors = ColorSelectorBlock(b_colors[:6], "B", is_all_mode=(b_mode_str=="all"))
+        self.button_colors = ColorSelectorBlock(b_colors[:6], "B", mode_idx=0 if (b_mode_str=="all") else 1)
         layout.addWidget(self.button_colors)
 
         self.button_fill.selection_changed.connect(self._on_button_fill)
@@ -411,31 +508,57 @@ class LedSettingsMenu:
         has_fill = (self.slider_fill.get_value() != 0)
         self.lbl_s_style.setVisible(has_fill)
         self.slider_style.setVisible(has_fill)
-        
+
         is_solid = (self.slider_style.get_value() == 1)
-        self.lbl_s_mode.setVisible(has_fill and is_solid)
-        self.slider_mode.setVisible(has_fill and is_solid)
         
-        self.lbl_s_color.setVisible(has_fill and is_solid)
-        self.slider_colors.setVisible(has_fill and is_solid)
-        
-        if has_fill and is_solid:
-            self.slider_colors.set_mode(self.slider_mode.get_value() == 0)
+        # Update options for color mode based on style
+        mode_val = self.slider_mode.get_value()
+        if is_solid:
+            self.slider_mode.update_options(["All", "By slider"])
+        else:
+            self.slider_mode.update_options(["Random", "Select colors"])
+
+        show_mode = has_fill
+        # Show color pickers if solid, OR if animation + 'Select colors'
+        show_colors = has_fill and (is_solid or mode_val == 1)
+
+        self.lbl_s_mode.setVisible(show_mode)
+        self.slider_mode.setVisible(show_mode)
+        self.lbl_s_color.setVisible(show_colors)
+        self.slider_colors.setVisible(show_colors)
+
+        if show_colors:
+            if is_solid:
+                self.slider_colors.set_mode(0 if mode_val == 0 else 1)
+            else:
+                self.slider_colors.set_mode(2)
 
     def _update_button_visibility(self):
         has_fill = (self.button_fill.get_value() != 0)
         self.lbl_b_style.setVisible(has_fill)
         self.button_style.setVisible(has_fill)
-        
+
         is_solid = (self.button_style.get_value() == 1)
-        self.lbl_b_mode.setVisible(has_fill and is_solid)
-        self.button_mode.setVisible(has_fill and is_solid)
         
-        self.lbl_b_color.setVisible(has_fill and is_solid)
-        self.button_colors.setVisible(has_fill and is_solid)
-        
-        if has_fill and is_solid:
-            self.button_colors.set_mode(self.button_mode.get_value() == 0)
+        mode_val = self.button_mode.get_value()
+        if is_solid:
+            self.button_mode.update_options(["All", "By button"])
+        else:
+            self.button_mode.update_options(["Random", "Select colors"])
+
+        show_mode = has_fill
+        show_colors = has_fill and (is_solid or mode_val == 1)
+
+        self.lbl_b_mode.setVisible(show_mode)
+        self.button_mode.setVisible(show_mode)
+        self.lbl_b_color.setVisible(show_colors)
+        self.button_colors.setVisible(show_colors)
+
+        if show_colors:
+            if is_solid:
+                self.button_colors.set_mode(0 if mode_val == 0 else 1)
+            else:
+                self.button_colors.set_mode(2)
 
     # ── Handlers ──────────────────────────────────────────────────────────
 
@@ -462,9 +585,19 @@ class LedSettingsMenu:
             self._board_comm.send_led_params(slider_style=style)
 
     def _on_slider_mode(self, mode_idx: int):
-        mode_str = "all" if mode_idx == 0 else "per_slider"
+        is_solid = (self.slider_style.get_value() == 1)
+        if is_solid:
+            mode_str = "all" if mode_idx == 0 else "per_slider"
+        else:
+            mode_str = "random" if mode_idx == 0 else "custom_palette"
+            
         settings_manager.set_slider_color_mode(mode_str)
         self._update_slider_visibility()
+        
+        # Send mode and current colors immediately
+        if self._board_comm:
+            current_colors = settings_manager.get_slider_led_colors()
+            self._board_comm.send_led_params(slider_mode=mode_idx, slider_colors=current_colors)
 
     def _on_slider_colors(self, colors_list: list):
         settings_manager.set_slider_led_colors(colors_list)
@@ -484,9 +617,19 @@ class LedSettingsMenu:
             self._board_comm.send_led_params(button_style=style)
 
     def _on_button_mode(self, mode_idx: int):
-        mode_str = "all" if mode_idx == 0 else "per_button"
+        is_solid = (self.button_style.get_value() == 1)
+        if is_solid:
+            mode_str = "all" if mode_idx == 0 else "per_button"
+        else:
+            mode_str = "random" if mode_idx == 0 else "custom_palette"
+
         settings_manager.set_button_color_mode(mode_str)
         self._update_button_visibility()
+        
+        # Send mode and current colors immediately
+        if self._board_comm:
+            current_colors = settings_manager.get_button_led_colors()
+            self._board_comm.send_led_params(button_mode=mode_idx, button_colors=current_colors)
 
     def _on_button_colors(self, colors_list: list):
         settings_manager.set_button_led_colors(colors_list)

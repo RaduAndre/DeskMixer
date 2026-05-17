@@ -1240,19 +1240,11 @@ class MainWindow(QMainWindow):
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setStyleSheet("""
             QScrollArea {
                 background: transparent;
                 border: none;
-            }
-            QScrollBar:vertical {
-                background: #1a1a1a;
-                width: 8px;
-                border-radius: 4px;
-            }
-            QScrollBar::handle:vertical {
-                background: #555;
-                border-radius: 4px;
             }
         """)
         
@@ -1263,8 +1255,34 @@ class MainWindow(QMainWindow):
         self.menu_content_layout.setAlignment(Qt.AlignTop)
         
         scroll_area.setWidget(menu_content_widget)
-        menu_layout.addWidget(scroll_area)
-        
+        menu_layout.addWidget(scroll_area, 1)
+
+        # Fixed version footer (always visible at bottom, only shown in settings)
+        self.menu_version_footer = QWidget()
+        self.menu_version_footer.setFixedHeight(36)
+        self.menu_version_footer.setStyleSheet(f"""
+            QWidget {{
+                background-color: {colors.BLACK};
+                border-top: 1px solid {colors.BORDER};
+            }}
+        """)
+        footer_layout = QHBoxLayout(self.menu_version_footer)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        self.menu_version_label = QLabel("DeskMixer")
+        self.menu_version_label.setAlignment(Qt.AlignCenter)
+        self.menu_version_label.setStyleSheet(f"""
+            QLabel {{
+                color: {colors.BORDER};
+                font-size: 11px;
+                font-family: Montserrat, Segoe UI;
+                background: transparent;
+                border: none;
+            }}
+        """)
+        footer_layout.addWidget(self.menu_version_label)
+        self.menu_version_footer.hide()  # Hidden until settings menu opens
+        menu_layout.addWidget(self.menu_version_footer)
+
         # Menu builder
         self.menu_builder = MenuBuilder(self.menu_content_layout, self.audio_manager, self.board_comm)
         self.menu_builder.version = self.version  # Pass version for settings menu display
@@ -1371,6 +1389,11 @@ class MainWindow(QMainWindow):
             if self.selected_button:
                 self.selected_button.set_active(False)
                 self.selected_button = None
+            # Show version footer with current version
+            if hasattr(self, 'menu_version_footer'):
+                v = self.version if self.version else "unknown"
+                self.menu_version_label.setText(f"DeskMixer v{v}")
+                self.menu_version_footer.show()
         elif menu_type == "slider":
             title_num = item_num + 1
             if self.selected_slider and hasattr(self.selected_slider, 'id'):
@@ -1386,6 +1409,9 @@ class MainWindow(QMainWindow):
             if self.selected_button:
                 self.selected_button.set_active(False)
                 self.selected_button = None
+            # Hide version footer
+            if hasattr(self, 'menu_version_footer'):
+                self.menu_version_footer.hide()
         elif menu_type == "button":
             title_num = item_num + 1
             if self.selected_button and hasattr(self.selected_button, 'id'):
@@ -1401,12 +1427,16 @@ class MainWindow(QMainWindow):
             if self.selected_slider:
                 self.selected_slider.set_active(False)
                 self.selected_slider = None
-        
+            # Hide version footer
+            if hasattr(self, 'menu_version_footer'):
+                self.menu_version_footer.hide()
         elif menu_type == "screen":
             self.menu_title.setText("Screen Settings")
             self.menu_builder.build_screen_menu()
             self.update_settings_icon(False)
-            
+            # Hide version footer
+            if hasattr(self, 'menu_version_footer'):
+                self.menu_version_footer.hide()
             # Deactivate other selections
             if self.selected_slider:
                 self.selected_slider.set_active(False)
@@ -1427,7 +1457,7 @@ class MainWindow(QMainWindow):
             self.menu_blocker.raise_()
             self.menu_blocker.show()
             
-            self.animate_menu(300)
+            self.animate_menu(380)
             self.menu_open = True
     
     def animate_menu(self, target_width: int):

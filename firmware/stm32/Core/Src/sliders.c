@@ -88,6 +88,7 @@ void SLIDERS_Read(void)
             /* (~95.2% of ADC range) to 1024 so real-world potentiometers   */
             /* that cannot reach the absolute ADC ceiling still report 100%. */
             uint16_t mapped = (uint16_t)(s_raw12[i] >> 2u);
+            if (s_raw12[i] <= 50u) mapped = 0u;
             if (s_raw12[i] >= 3900u) mapped = 1024u;
             s_values[i] = mapped;
         }

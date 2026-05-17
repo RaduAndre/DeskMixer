@@ -91,11 +91,11 @@ static const char CONFIG_RESPONSE[] =
 
 /*
  * SLIDER_TX_THRESHOLD  – minimum change in the 0-1024 scaled value before
- * a slider packet is transmitted.  Set to 2 (≈ 0.2% of full scale).
+ * a slider packet is transmitted.  Set to 8 (≈ 0.8% of full scale).
  * Eliminates idle noise-chatter while keeping step resolution fine enough
  * to be imperceptible to the audio API.
  */
-#define SLIDER_TX_THRESHOLD  2u
+#define SLIDER_TX_THRESHOLD  8u
 
 /*
  * Time (ms) to wait after USB device init before sending the startup
@@ -287,8 +287,10 @@ void COMM_OnRxData(const uint8_t *buf, uint32_t len)
                         if      (strcmp(key, "BR") == 0) { PARAMS_SetBrightness((uint8_t)iv);   leds_changed = 1; }
                         else if (strcmp(key, "SF") == 0) { PARAMS_SetSliderFill((uint8_t)iv);   leds_changed = 1; }
                         else if (strcmp(key, "SS") == 0) { PARAMS_SetSliderStyle((uint8_t)iv);  leds_changed = 1; }
+                        else if (strcmp(key, "SM") == 0) { PARAMS_SetSliderMode((uint8_t)iv);   leds_changed = 1; }
                         else if (strcmp(key, "BF") == 0) { PARAMS_SetButtonFill((uint8_t)iv);   leds_changed = 1; }
                         else if (strcmp(key, "BS") == 0) { PARAMS_SetButtonStyle((uint8_t)iv);  leds_changed = 1; }
+                        else if (strcmp(key, "BM") == 0) { PARAMS_SetButtonMode((uint8_t)iv);   leds_changed = 1; }
                         else if (strcmp(key, "AS") == 0) { PARAMS_SetAnimSpeed((uint8_t)iv);    leds_changed = 1; }
                         else if (key[0] == 'S' && key[1] == 'C' && key[2] >= '1' && key[2] <= '5') {
                             /* SC1-SC5 : slider colour  R,G,B */

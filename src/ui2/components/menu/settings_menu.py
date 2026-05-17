@@ -4,7 +4,6 @@ Handles general settings, layout configuration, and accent color.
 """
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel
 from ui2 import colors
 from ui2.settings_manager import settings_manager
 from utils import system_startup
@@ -17,7 +16,8 @@ class SettingsMenu:
         """Build the settings menu content."""
         self.menu_builder.clear()
         
-        self.menu_builder.add_head("General")
+        # General section — collapsible, starts expanded
+        self.menu_builder.add_head("General", expandable=True, expanded=True)
         
         # Start Hidden
         is_hidden = settings_manager.get_start_hidden() == 1
@@ -47,7 +47,9 @@ class SettingsMenu:
         normal_item.clicked.connect(lambda: self._set_sampling("normal", normal_item, [instant_item, responsive_item, soft_item, hard_item]))
         hard_item.clicked.connect(lambda: self._set_sampling("hard", hard_item, [instant_item, responsive_item, soft_item, normal_item]))
         
-        self.menu_builder.add_head("Layout")
+        # Layout section — collapsible, starts expanded
+        self.menu_builder.add_head("Layout", expandable=True, expanded=True)
+
         # Grid Layout Section
         grid_item = self.menu_builder.add_item("Grid Size", is_expandable=True, selected=True)
         
@@ -153,18 +155,6 @@ class SettingsMenu:
 
         reorder_btns.clicked.connect(toggle_reorder_buttons)
         reorder_sliders.clicked.connect(toggle_reorder_sliders)
-
-        # Add Version Label
-        self.menu_builder.content_layout.addStretch()
-        
-        version_text = "DeskMixer build unknown"
-        if hasattr(self.menu_builder, 'version') and self.menu_builder.version:
-            version_text = f"DeskMixer v{self.menu_builder.version}"
-        
-        version_label = QLabel(version_text)
-        version_label.setAlignment(Qt.AlignCenter)
-        version_label.setStyleSheet(f"color: {colors.WHITE}; margin-top: 10px; margin-bottom: 0px;")
-        self.menu_builder.content_layout.addWidget(version_label)
 
     def _toggle_setting_hidden(self, item):
         new_val = 0 if settings_manager.get_start_hidden() == 1 else 1

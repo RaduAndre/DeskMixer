@@ -1,8 +1,8 @@
 ../Core/Src/comm.c:152:13:_send_reliable	4
 ../Core/Src/comm.c:166:20:_send_best_effort	1
 ../Core/Src/comm.c:173:6:COMM_Init	2
-../Core/Src/comm.c:203:6:COMM_OnRxData	42
-../Core/Src/comm.c:343:6:COMM_SendSliders	16
-../Core/Src/comm.c:425:6:COMM_SendButtonPress	2
-../Core/Src/comm.c:440:6:COMM_Send	2
-../Core/Src/comm.c:447:6:COMM_Process	4
+../Core/Src/comm.c:203:6:COMM_OnRxData	44
+../Core/Src/comm.c:345:6:COMM_SendSliders	16
+../Core/Src/comm.c:427:6:COMM_SendButtonPress	2
+../Core/Src/comm.c:442:6:COMM_Send	2
+../Core/Src/comm.c:449:6:COMM_Process	4

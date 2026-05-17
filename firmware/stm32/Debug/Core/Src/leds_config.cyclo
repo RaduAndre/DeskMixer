@@ -1,0 +1,13 @@
+../Core/Src/leds_config.c:42:9:led_brite	1
+../Core/Src/leds_config.c:49:6:LED_SetBrightnessPct	2
+../Core/Src/leds_config.c:55:6:LED_SetAnimSpeedLevel	6
+../Core/Src/leds_config.c:71:6:LED_SetSliderFillMode	1
+../Core/Src/leds_config.c:72:6:LED_SetButtonFillMode	1
+../Core/Src/leds_config.c:73:6:LED_SetSliderStyleMode	1
+../Core/Src/leds_config.c:74:6:LED_SetButtonStyleMode	1
+../Core/Src/leds_config.c:75:6:LED_SetSliderColorMode	1
+../Core/Src/leds_config.c:76:6:LED_SetButtonColorMode	1
+../Core/Src/leds_config.c:78:6:LED_SetButtonMask	1
+../Core/Src/leds_config.c:80:6:LED_SetSliderValue	5
+../Core/Src/leds_config.c:94:6:LED_SetSliderColor	2
+../Core/Src/leds_config.c:102:6:LED_SetButtonColor	2

@@ -1,4 +1,4 @@
-Core/Src/leds.o: ../Core/Src/leds.c ../Core/Inc/leds.h \
+Core/Src/leds_anim.o: ../Core/Src/leds_anim.c ../Core/Inc/leds.h \
  ../Core/Inc/leds_anim.h ../Core/Inc/leds.h ../Core/Inc/main.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h \
  ../Core/Inc/stm32f1xx_hal_conf.h \

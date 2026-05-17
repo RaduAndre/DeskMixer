@@ -85,8 +85,8 @@ class BoardComm:
         self._board_params   = None
         self._params_event   = threading.Event()
         # Cache of the last params we confirmed the board holds.
-        # Used by sync_params_if_changed to send only changed fields.
-        self._last_sent_params = None
+        # Initialize it from the host config so early UI updates trigger partial diffs.
+        self._last_sent_params = self._get_host_params()
 
         # ── Command queue ──────────────────────────────────────────────
         self._cmd_queue: "queue.Queue[_Cmd]" = queue.Queue(maxsize=QUEUE_MAXLEN)
@@ -165,9 +165,12 @@ class BoardComm:
                 print("BoardComm: no local config – skipping param sync")
                 return
 
-            if board_params is None or self._params_differ(board_params, host_params):
-                print("BoardComm: syncing params to board")
+            if board_params is None:
+                print("BoardComm: no board params received, syncing full config to board")
                 self._send_set_params(host_params)
+            elif self._params_differ(board_params, host_params):
+                print("BoardComm: board config differs, syncing partial params to board")
+                self._send_diff_params(board_params, host_params)
             else:
                 print("BoardComm: board params match host config – no sync needed")
 
@@ -405,6 +408,8 @@ class BoardComm:
             "button_style":  None,
             "slider_fill":   None,
             "button_fill":   None,
+            "slider_mode":   None,
+            "button_mode":   None,
             "anim_speed":    None,
             "slider_colors": [None] * NUM_SLIDERS,
             "button_colors": [None] * NUM_BUTTONS,
@@ -451,6 +456,18 @@ class BoardComm:
                 if key == "BS":
                     try:
                         led["button_style"] = int(val)
+                    except ValueError:
+                        pass
+                    continue
+                if key == "SM":
+                    try:
+                        led["slider_mode"] = int(val)
+                    except ValueError:
+                        pass
+                    continue
+                if key == "BM":
+                    try:
+                        led["button_mode"] = int(val)
                     except ValueError:
                         pass
                     continue
@@ -523,15 +540,20 @@ class BoardComm:
                 name    = self._binding_to_button_name(binding, i)
                 buttons.append(name[:FLASH_NAME_LEN])
 
+            sm_str = cfg.get("led_slider_color_mode", "all")
+            bm_str = cfg.get("led_button_color_mode", "all")
+            
             # ── LED settings ──────────────────────────────────────────────
             led = {
                 "brightness":    cfg.get("led_brightness", 80),
-                "slider_fill":   cfg.get("slider_led_fill", 1),
-                "slider_style":  cfg.get("slider_led_style", 0),
-                "slider_colors": cfg.get("slider_led_colors", [[0,61,61]]*5),
-                "button_fill":   cfg.get("button_led_fill", 1),
-                "button_style":  cfg.get("button_led_style", 0),
-                "button_colors": cfg.get("button_led_colors", [[61,20,0]]*6),
+                "slider_fill":   cfg.get("led_slider_fill", 1),
+                "slider_style":  cfg.get("led_slider_style", 0),
+                "slider_mode":   1 if sm_str in ("per_slider", "custom_palette") else 0,
+                "slider_colors": cfg.get("led_slider_colors", [[0,61,61]]*5),
+                "button_fill":   cfg.get("led_button_fill", 1),
+                "button_style":  cfg.get("led_button_style", 0),
+                "button_mode":   1 if bm_str in ("per_button", "custom_palette") else 0,
+                "button_colors": cfg.get("led_button_colors", [[61,20,0]]*6),
                 "anim_speed":    cfg.get("led_anim_speed", 5),
             }
 
@@ -555,7 +577,7 @@ class BoardComm:
           - list of dict {"value": ...} → values joined with "+"
           - dict {"app_name": ...}      → legacy format
         """
-        default = f"Slider {index + 1}"
+        default = "None"
 
         if not binding:
             return default
@@ -592,7 +614,7 @@ class BoardComm:
 
         Binding format: dict {"value": "action_name", "argument": ...}
         """
-        default = f"Button {index + 1}"
+        default = "None"
 
         if not binding:
             return default
@@ -619,8 +641,10 @@ class BoardComm:
         if b_led.get("brightness")   != h_led.get("brightness"):   return True
         if b_led.get("slider_fill")  != h_led.get("slider_fill"):  return True
         if b_led.get("slider_style") != h_led.get("slider_style"): return True
+        if b_led.get("slider_mode")  != h_led.get("slider_mode"):  return True
         if b_led.get("button_fill")  != h_led.get("button_fill"):  return True
         if b_led.get("button_style") != h_led.get("button_style"): return True
+        if b_led.get("button_mode")  != h_led.get("button_mode"):  return True
         if b_led.get("anim_speed")   != h_led.get("anim_speed"):   return True
         if b_led.get("slider_colors") != h_led.get("slider_colors"): return True
         if b_led.get("button_colors") != h_led.get("button_colors"): return True
@@ -651,10 +675,14 @@ class BoardComm:
             parts.append(f"SF:{int(led['slider_fill'])}")
         if led.get("slider_style") is not None:
             parts.append(f"SS:{int(led['slider_style'])}")
+        if led.get("slider_mode") is not None:
+            parts.append(f"SM:{int(led['slider_mode'])}")
         if led.get("button_fill") is not None:
             parts.append(f"BF:{int(led['button_fill'])}")
         if led.get("button_style") is not None:
             parts.append(f"BS:{int(led['button_style'])}")
+        if led.get("button_mode") is not None:
+            parts.append(f"BM:{int(led['button_mode'])}")
         if led.get("anim_speed") is not None:
             parts.append(f"AS:{int(led['anim_speed'])}")
         for i, rgb in enumerate(led.get("slider_colors") or []):
@@ -714,8 +742,10 @@ class BoardComm:
             ("brightness",   "BR"),
             ("slider_fill",  "SF"),
             ("slider_style", "SS"),
+            ("slider_mode",  "SM"),
             ("button_fill",  "BF"),
             ("button_style", "BS"),
+            ("button_mode",  "BM"),
             ("anim_speed",   "AS"),
         ]:
             n_val = n_led.get(py_key)
